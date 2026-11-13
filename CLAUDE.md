@@ -15,10 +15,11 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
   3. **What's in this PR**: grouped by area (App / Data layer / Database / PWA / Dependencies)
   4. **Database changes**: tables, policies, grants and functions (a table works well), plus the new migration file's name
   5. **Security notes**: anything touching auth, RLS, keys or data exposure
-  6. **Testing**: a checklist of what was actually tested and how, and what's still untested
-  7. **Deploy checklist**: only steps that are still manual (most deploys are automatic, see Deploys below)
+  6. **Testing**: what was actually tested and how, as checked boxes (`- [x]`). Put anything untested under a **Not tested** sub-list of plain bullets.
+  7. **Deploy checklist**: only steps that are still manual, as a numbered list (most deploys are automatic, see Deploys below)
   8. **Known limitations and follow-ups**
-- Don't claim something was tested if it wasn't. List it as unchecked.
+- **No unchecked boxes (`- [ ]`) anywhere in a PR.** GitHub shows them as "3 of 8 tasks", which makes a finished PR look unfinished. Use checked boxes for what was done, and plain bullets or numbered lists for everything else.
+- Don't claim something was tested if it wasn't. List it under **Not tested**.
 
 ## What this is
 
