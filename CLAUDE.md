@@ -7,7 +7,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Never add AI attribution anywhere.** No `Co-Authored-By` trailers, no session links, no "Generated with Claude Code" (or similar) lines. This applies to commits, PR titles and bodies, comments, and code. Commits are authored as the repo owner only.
 - **Commit identity:** `Adrian Rojas <145087441+adrianrojas801@users.noreply.github.com>`, unsigned. The repo is public, so never use a personal email address.
 - **Never force-push or rewrite pushed history.** Fix mistakes with a new commit or a new branch.
-- **Never push to `main`.** Do each change on its own branch (`feat/...`, `fix/...`, `chore/...`) and open a PR. The owner merges.
+- **Never push to `main`.** Do each change on its own branch (`feat/...`, `fix/...`, `chore/...`) and open a PR. The owner merges with a **merge commit** (squash and rebase are turned off), so never rewrite a branch to tidy it up.
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`), an imperative subject of 72 characters or fewer, and a body that explains *what* and *why* when it isn't obvious.
 - **PR descriptions must be thorough**, written the way a real developer would write them, never bare-bones. Use this structure:
   1. **Summary**: what changed, in 2–3 sentences
@@ -35,7 +35,8 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 | `supabase/migrations/` | All schema changes, as `YYYYMMDDHHMMSS_short_name.sql` (`20261113000000_init.sql` is the base) |
 | `supabase/config.toml` | Minimal CLI project file. Never run `supabase config push`: auth settings are managed by the Deploy workflow. |
 | `tests/` | `check_syntax.js`, `check_sql.py`, `smoke.py` with `mock-supabase.js` |
-| `.github/workflows/` | `ci.yml` (every PR and `main`) and `deploy.yml` (Supabase migrations and auth settings after CI passes on `main`) |
+| `.github/workflows/` | `ci.yml` (every PR and `main`), `deploy.yml` (Supabase migrations and auth settings after CI passes on `main`) and `labeler.yml` (path labels on PRs) |
+| `.github/labeler.yml` | Which paths get the `app`, `database`, `ci` and `docs` labels |
 | `README.md` | Human setup guide |
 
 ## Architecture you must preserve
@@ -66,6 +67,7 @@ python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon g
 python3 tests/smoke.py         # headless sign-in, save, import, reload (mocked Supabase)
 ```
 
+- `main`'s ruleset requires one check: **Merge gate**, which passes only when every other CI job passed. When you add a CI job, add it to the gate's `needs:` list, or it won't block merging.
 - When you add a feature, **extend `tests/smoke.py`** (and `tests/mock-supabase.js` if you need new Supabase calls) to cover it.
 - Migrations must be re-runnable (`if not exists`, `drop policy if exists`) and must never be edited after they've been merged. Add a new file instead.
 - Put what was tested, and what wasn't, in the PR's Testing section.
