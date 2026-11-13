@@ -9,8 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Each job shows up as its own line (✓ / ✗) in the PR's checks list, and main's
-# branch protection requires all four to pass before merging.
+# Each job shows up as its own line (✓ / ✗) in the PR's checks list. main's
+# ruleset requires only "Merge gate", which passes when every other job passed.
+# When you add a job, add it to the gate's `needs` list.
 
 jobs:
   syntax:
@@ -74,3 +75,26 @@ jobs:
             exit 1
           fi
           echo "No secret keys found." >> "$GITHUB_STEP_SUMMARY"
+
+  gate:
+    name: Merge gate
+    if: always()
+    needs: [syntax, sql, smoke, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every check passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "### Merge gate"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "$RESULTS" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if echo "$RESULTS" | jq -e 'any(.[]; .result != "success")' > /dev/null; then
+            echo "::error::One or more checks did not pass. See the table in the summary."
+            exit 1
+          fi
+          echo "All checks passed."

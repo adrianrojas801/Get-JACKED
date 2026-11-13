@@ -1,0 +1,21 @@
+name: Path labels
+
+# pull_request_target runs this workflow from main, never from the PR's code,
+# so it can label PRs safely. It only reads the list of changed files.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Path labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: true

@@ -20,8 +20,8 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 
 ## How deploys work
 
-1. Open a PR. **CI** runs: JavaScript syntax, SQL migration checks (parse, RLS on every table, no `anon` grants), a headless smoke test, and a secret scan. Vercel posts a **preview URL** on the PR.
-2. Merge to `main`. Vercel deploys the app to production. Once CI passes on `main`, the **Deploy** workflow:
+1. Open a PR. **CI** runs: JavaScript syntax, SQL migration checks (parse, RLS on every table, no `anon` grants), a headless smoke test, and a secret scan. **Merge gate** passes once all of them pass, and it's the check `main` requires. The PR also gets labels (`app`, `database`, `ci`, `docs`) based on the files it changes. Vercel posts a **preview URL** on the PR.
+2. Merge to `main` with **Create a merge commit**. Vercel deploys the app to production. Once CI passes on `main`, the **Deploy** workflow:
    - applies any new migrations (`supabase db push`)
    - turns off public sign-ups and sets the Site URL and Redirect URLs
    - makes `ADMIN_EMAIL` an admin, if that account exists
@@ -35,7 +35,8 @@ To change the database, add a new file to `supabase/migrations/` named `YYYYMMDD
 2. **GitHub → Settings → Secrets and variables → Actions:**
    - Secrets: `SUPABASE_ACCESS_TOKEN` (supabase.com → Account → Access Tokens), `SUPABASE_DB_PASSWORD`, `ADMIN_EMAIL`
    - Variables: `SUPABASE_PROJECT_ID` = `tdjogrkeovanphgorvys`, `SITE_URL` = the Vercel production URL
-3. **Your account:** Supabase → Authentication → Users → Add user → Create new user (email and a temporary password, with **Auto Confirm User** checked). Then run Actions → Deploy once so you become admin, sign in, and change the password under Plan → Account.
+3. **GitHub → Settings → General → Pull Requests:** allow merge commits only (uncheck squash and rebase). **Settings → Rules → Rulesets:** a ruleset on `main` that requires a pull request and the **Merge gate** status check, with **Require linear history** off.
+4. **Your account:** Supabase → Authentication → Users → Add user → Create new user (email and a temporary password, with **Auto Confirm User** checked). Then run Actions → Deploy once so you become admin, sign in, and change the password under Plan → Account.
 
 ## Adding a person
 
