@@ -8,7 +8,9 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 - `config.js`: the Supabase project URL and **publishable** key. This is public on purpose: row-level security keeps each person's data private.
 - `vendor/supabase.js`: supabase-js v2.119.0 browser build, kept in the repo so the app doesn't depend on a CDN
 - `manifest.webmanifest` and `icons/`: home-screen app name and icon
-- `supabase/schema.sql`: tables, security rules and helper functions
+- `supabase/migrations/`: every database change, applied in order by the Deploy workflow
+- `tests/`: syntax, SQL and smoke-test checks that CI runs on every PR
+- `.github/workflows/`: CI (`ci.yml`) and Deploy (`deploy.yml`)
 
 ### Data model
 
@@ -16,18 +18,24 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 - `docs`: each person's tracker data, keyed by `(user_id, coll, id)`, where `coll` is `days`, `workouts` or `settings`. The RLS policy only allows `user_id = auth.uid()`.
 - `patch_doc(coll, id, patch)`: merges changed fields into a doc so two devices don't overwrite each other's edits.
 
+## How deploys work
+
+1. Open a PR. **CI** runs: JavaScript syntax, SQL migration checks (parse, RLS on every table, no `anon` grants), a headless smoke test, and a secret scan. Vercel posts a **preview URL** on the PR.
+2. Merge to `main`. Vercel deploys the app to production. Once CI passes on `main`, the **Deploy** workflow:
+   - applies any new migrations (`supabase db push`)
+   - turns off public sign-ups and sets the Site URL and Redirect URLs
+   - makes `ADMIN_EMAIL` an admin, if that account exists
+3. You can also re-run Deploy by hand: Actions → Deploy → Run workflow.
+
+To change the database, add a new file to `supabase/migrations/` named `YYYYMMDDHHMMSS_short_name.sql`. Never edit a migration that's already been applied.
+
 ## One-time setup
 
-1. **Database:** Supabase → SQL Editor → New query → paste `supabase/schema.sql` → Run.
-2. **Turn off public sign-ups:** Authentication → Sign In / Providers → turn off **Allow new users to sign up**. Keep the Email provider on.
-3. **Deploy:** Vercel → Add New → Project → import this repo → Framework preset **Other** → Deploy. There's no build command.
-4. **Auth URLs:** Supabase → Authentication → URL Configuration → set **Site URL** to the Vercel URL and add it under **Redirect URLs**.
-5. **Create your account:** Authentication → Users → Add user → Create new user (email and a temporary password, with **Auto Confirm User** checked). Then sign in to the app and change the password under Plan → Account.
-6. **Make yourself admin:** SQL Editor:
-   ```sql
-   update public.profiles set is_admin = true
-   where id = (select id from auth.users where email = 'you@example.com');
-   ```
+1. **Vercel:** Add New → Project → import this repo → Framework preset **Other** → Deploy. There's no build command.
+2. **GitHub → Settings → Secrets and variables → Actions:**
+   - Secrets: `SUPABASE_ACCESS_TOKEN` (supabase.com → Account → Access Tokens), `SUPABASE_DB_PASSWORD`, `ADMIN_EMAIL`
+   - Variables: `SUPABASE_PROJECT_ID` = `tdjogrkeovanphgorvys`, `SITE_URL` = the Vercel production URL
+3. **Your account:** Supabase → Authentication → Users → Add user → Create new user (email and a temporary password, with **Auto Confirm User** checked). Then run Actions → Deploy once so you become admin, sign in, and change the password under Plan → Account.
 
 ## Adding a person
 

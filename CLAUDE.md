@@ -13,10 +13,10 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
   1. **Summary**: what changed, in 2–3 sentences
   2. **Why**: the motivation
   3. **What's in this PR**: grouped by area (App / Data layer / Database / PWA / Dependencies)
-  4. **Database changes**: tables, policies, grants and functions (a table works well), plus the migration file to run
+  4. **Database changes**: tables, policies, grants and functions (a table works well), plus the new migration file's name
   5. **Security notes**: anything touching auth, RLS, keys or data exposure
   6. **Testing**: a checklist of what was actually tested and how, and what's still untested
-  7. **Deploy checklist**: manual steps (SQL to run, settings to change)
+  7. **Deploy checklist**: only steps that are still manual (most deploys are automatic, see Deploys below)
   8. **Known limitations and follow-ups**
 - Don't claim something was tested if it wasn't. List it as unchecked.
 
@@ -32,8 +32,10 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 | `config.js` | Supabase project URL and **publishable** key (public by design) |
 | `vendor/supabase.js` | supabase-js 2.119.0 browser build, kept in the repo (no CDN at runtime) |
 | `manifest.webmanifest`, `icons/` | PWA name, colors and icons |
-| `supabase/schema.sql` | Base schema. Re-runnable. |
-| `supabase/migrations/` | Every schema change after v1, as `NNNN_short_name.sql` |
+| `supabase/migrations/` | All schema changes, as `YYYYMMDDHHMMSS_short_name.sql` (`20261113000000_init.sql` is the base) |
+| `supabase/config.toml` | Minimal CLI project file. Never run `supabase config push`: auth settings are managed by the Deploy workflow. |
+| `tests/` | `check_syntax.js`, `check_sql.py`, `smoke.py` with `mock-supabase.js` |
+| `.github/workflows/` | `ci.yml` (every PR and `main`) and `deploy.yml` (Supabase migrations and auth settings after CI passes on `main`) |
 | `README.md` | Human setup guide |
 
 ## Architecture you must preserve
@@ -54,12 +56,26 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Secrets:** only the publishable key goes in the repo. The secret / `service_role` key, the database password and any API keys (Anthropic, etc.) never go in the repo or client code. Server-side secrets live in Supabase Edge Function secrets or Vercel environment variables.
 - Public sign-ups are disabled. Accounts are created in Supabase → Authentication → Users → Add user, with Auto Confirm on. Supabase's built-in email only reaches project team members, so don't build features that depend on emailing other people without setting up custom SMTP.
 
-## Testing before every PR
+## Testing and CI
 
-1. Syntax-check the inline script: `node -e "..."` with `new Function()` on each `<script>` block.
-2. Run it in a headless browser (Playwright, 390×844 viewport) against a **mocked** `window.supabase` (serve a fake `vendor/supabase.js` through `page.route`). Cover sign-in, a save, a reload and any feature you touched. Fail on any `pageerror`.
-3. For SQL, parse-check the migration with `pglast`, and keep it re-runnable (`if not exists`, `drop policy if exists`).
-4. Put what was tested, and what wasn't, in the PR's Testing section.
+CI (`.github/workflows/ci.yml`) runs these on every PR. Run them locally before pushing:
+
+```bash
+node tests/check_syntax.js     # inline <script> + config.js syntax
+python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, file naming
+python3 tests/smoke.py         # headless sign-in, save, import, reload (mocked Supabase)
+```
+
+- When you add a feature, **extend `tests/smoke.py`** (and `tests/mock-supabase.js` if you need new Supabase calls) to cover it.
+- Migrations must be re-runnable (`if not exists`, `drop policy if exists`) and must never be edited after they've been merged. Add a new file instead.
+- Put what was tested, and what wasn't, in the PR's Testing section.
+
+## Deploys (automatic)
+
+- **App:** Vercel's Git integration. `main` goes to production, and every branch/PR gets a preview URL. Previews use the production Supabase project, so don't test destructive data changes on previews.
+- **Database and auth:** `deploy.yml` runs after CI passes on `main` (or by hand). It applies migrations with `supabase db push`, sets `disable_signup`, `site_url` and `uri_allow_list` through the Management API, and grants admin to `ADMIN_EMAIL`.
+- Required GitHub settings: secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `ADMIN_EMAIL`. Variables `SUPABASE_PROJECT_ID`, `SITE_URL`.
+- A PR's **Deploy checklist** should only list steps that are still manual, such as a new secret to add. Write "None, fully automatic" when there aren't any.
 
 Local preview: `python3 -m http.server 8000` from the repo root.
 
