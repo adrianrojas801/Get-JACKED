@@ -17,7 +17,14 @@ concurrency:
 jobs:
   supabase:
     name: Supabase (migrations + auth settings)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only run for CI on a real push to this repo's main branch (never for pull requests or forks),
+    # or when started by hand from the Actions tab.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == 'main' &&
+           github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
