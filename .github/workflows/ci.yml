@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Each job shows up as its own line (✓ / ✗) in the PR's checks list, and main's
+# branch protection requires all four to pass before merging.
+
+jobs:
+  syntax:
+    name: JavaScript syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check inline scripts and config.js
+        run: node tests/check_syntax.js | tee -a "$GITHUB_STEP_SUMMARY"
+
+  sql:
+    name: SQL migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pglast
+      - name: Parse, RLS on every table, no anon grants, file naming
+        run: |
+          {
+            echo "### SQL migrations"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          set -o pipefail
+          python tests/check_sql.py | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright + Chromium
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Sign-in, save, import, reload, all tabs
+        run: python tests/smoke.py
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: No secret keys committed
+        run: |
+          if grep -RInE "sb_secret_[A-Za-z0-9_-]{10,}|sk-ant-[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\." --exclude-dir=.git --exclude-dir=vendor . ; then
+            echo "::error::Possible secret found in the repo. Remove it and rotate the key."
+            exit 1
+          fi
+          echo "No secret keys found." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,5 @@
+# Supabase CLI project file.
+# Kept minimal on purpose: the Deploy workflow only uses it to run `supabase db push`.
+# Auth settings (sign-ups off, site URL, redirect URLs) are set by the workflow through
+# the Management API, so nothing here can overwrite them. Don't run `supabase config push`.
+project_id = "get-jacked"

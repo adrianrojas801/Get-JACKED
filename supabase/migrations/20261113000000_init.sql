@@ -1,5 +1,5 @@
 -- Get Jacked: database setup
--- Run this once in Supabase: SQL Editor -> New query -> paste -> Run.
+-- Applied automatically by the Deploy workflow (supabase db push). Can also be pasted into the SQL Editor.
 -- Safe to re-run: it only creates things that don't exist yet.
 
 -- 1) Profiles: one row per person. Only an admin can see other people's names.
