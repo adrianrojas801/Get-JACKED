@@ -1,0 +1,26 @@
+# Path labels: actions/labeler adds these to each PR based on the files it changes.
+
+app:
+  - changed-files:
+      - any-glob-to-any-file:
+          - index.html
+          - config.js
+          - vendor/**
+          - manifest.webmanifest
+          - icons/**
+
+database:
+  - changed-files:
+      - any-glob-to-any-file:
+          - supabase/**
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - tests/**
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
