@@ -901,6 +901,7 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
+  h+=liftsWeekCard(td);
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -923,6 +924,16 @@ function viewProgress(){
     h+=`<div class="muted">${bw?'The line is your most reps in a set each session.':'The line is your estimated 1-rep max from your best set each session.'}</div><table class="simple" style="margin-top:6px"><tr><th>Date</th><th>Best set</th><th>${bw?'Reps':'Est. 1RM'}</th></tr>${sess.slice(-8).reverse().map(x=>`<tr><td>${short(x.date)}</td><td>${x.top}</td><td>${Math.round(x.v)}</td></tr>`).join('')}</table>`}
   h+=`</div>`;
   return h+recordsCard(names);
+}
+// Which lifts set a new best in the last 7 days, and which have stalled.
+function liftsWeekCard(td){
+  const wk=addDays(td,-7),up=[],stuck=[];
+  for(const n of liftNames()){const hist=liftHistory(n),last=hist[hist.length-1];if(!last||last.date<addDays(td,-21))continue;
+    const top=bestOf(hist);
+    if(hist.length>1&&top.date>wk)up.push(`${n} ${top.top}`);else if(stallOf(hist))stuck.push(n)}
+  if(!up.length&&!stuck.length)return '';
+  return `<div class="card"><h2>Lifts this week</h2>${up.length?`<p style="margin:0 0 6px"><span class="good">New bests:</span> ${up.map(esc).join(', ')}</p>`:'<p class="muted" style="margin:0 0 6px">No new bests in the last 7 days.</p>'}
+    ${stuck.length?`<p style="margin:0"><span class="warn">Stalled 2+ weeks:</span> ${stuck.map(esc).join(', ')}. Take about 10% off these and build back up.</p>`:''}</div>`;
 }
 // Best set ever for each lift, newest record first.
 function recordsCard(names){
