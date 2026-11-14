@@ -92,6 +92,9 @@ async def main():
         # 170 lb, 5'10", 23, male, desk: BMR ≈ 1775, ×1.4 ≈ 2485, −400 → 2100. Protein 1 g/lb on a cut → 170.
         check(s.get("cal") == 2100 and s.get("pro") == 170 and s.get("goal") == 160 and not s.get("legacy"),
               "Intake sets calorie, protein and goal-weight targets")
+        check(s.get("focus") == ["chest", "uchest"], "The 'what do you want to improve' answer sets the focus muscles")
+        check(await page.evaluate("JSON.stringify([focusFrom('Upper chest and side delts'), focusFrom('bigger arms, wider back'), focusFrom('lose my gut')])")
+              == '[["uchest","sdelt"],["sdelt","biceps","triceps","lats","uback"],[]]', "Focus words map to the right muscles")
         check(await page.is_visible("#nav") and "Your plan is ready" in await page.inner_text("#app"),
               "Tabs come back after the intake")
 
@@ -140,7 +143,7 @@ async def main():
         plan = {"program": {"days": {"a": {"t": "Chest day", "ex": [{"n": "Incline Smith press", "s": 4, "r": "6-10", "rest": 150}]},
                                      "b": {"t": "Leg day", "ex": [{"n": "Hack squat", "s": 3, "r": "8-12", "rest": 180}]}},
                             "order": ["a", "b"], "sched": ["rest", "a", "b", "rest", "a", "b", "rest"]},
-                "presets": [{"g": "Meals", "n": "Chipotle bowl", "c": 650, "p": 45}], "cal": 2300}
+                "presets": [{"g": "Meals", "n": "Chipotle bowl", "c": 650, "p": 45}], "cal": 2300, "focus": ["lats", "nope"]}
         await page.fill("#reqplan", "Here it is:\n```json\n" + json.dumps(plan) + "\n```")
         await page.click("button[data-act=reqsend]"); await page.wait_for_timeout(300)
         reqs = await page.evaluate("window.__reqs")
@@ -158,6 +161,7 @@ async def main():
               and (await page.evaluate("window.__reqs"))[0]["status"] == "applied"
               and "new program is ready" not in (await page.inner_text("#app")).lower(),
               "Use it switches the program, targets and foods, and marks it applied")
+        check(s.get("focus") == ["lats"], "A written program can set the focus muscles, and unknown ones are dropped")
 
         await page.click("#me"); await page.wait_for_timeout(150)
         await page.click("#me"); await page.wait_for_timeout(150)
@@ -178,6 +182,8 @@ async def main():
         check("set up your plan" not in (await page.inner_text("#app")).lower() and s.get("legacy")
               and prog.get("sched", [None])[0] == "push" and s.get("cal") == 2600,
               "Existing data moves into a saved program, with no intake")
+        check(s.get("focus") == ["uchest", "chest", "sdelt", "rdelt", "biceps", "triceps"],
+              "Pablo's focus muscles come from his stated goal: chest, shoulders and arms")
         check(prog["days"]["push"]["ex"][4]["n"] == "Cable lateral raise" and "swaps" not in s,
               "Saved 'Always' swaps carry over into the program")
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)

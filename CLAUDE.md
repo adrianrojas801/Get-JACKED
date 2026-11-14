@@ -51,7 +51,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Targets:** `targetFor(last, ex, stall)` is the one place that decides what to aim for today (double progression, stall back-off). The Workout tab shows it, uses it as the placeholders, and Done on an empty set logs it. The weight to add comes from `jumpFor()`: the exercise's `inc` in the program, else 10 lbs on Smith lifts and 5 elsewhere.
 - **Weekly advice:** `weightTrend(end)` gives the weight verdict and calorie change for the current goal; `calButton()` allows one change a week (`settings.calAdj`). `checkinCard()` builds the weekly check-in from `weekStats()`, `weightTrend()` and `liftsMoved()`; `settings.checkin` holds the week it was last dismissed.
 - **Goal phases:** `settings.profile.goal` is the phase and `settings.phaseStart` its start date. `nextPhases()` works out the targets for the next phase from the current ones with `GOAL_ADJ`, and is only offered once `goalReached()`.
-- **Muscles:** `muscleSets(end)` counts hard sets per muscle from `musFor()`. `settings.focus` is the list of focus muscle keys.
+- **Muscles:** `muscleWork(end)` counts hard sets per muscle from `musFor()`. `settings.focus` is the list of focus muscle keys. It is set from the person's goals, never left for them to discover: `focusFrom()` reads the intake's "what do you want to improve" answer, a written program can carry `"focus"`, and `ensureFocus()` fills it once for anyone who predates this (the owner gets `LEGACY_FOCUS`). After that the stars are theirs to change. Only focus muscles are flagged under 10 sets; others only under 4.
 - **Offline:** `sw.js` caches the app's own files (network-first, same-origin GETs only; bump `CACHE` when the file list changes). `keepCopy()`/`openCopy()` keep the last synced data in localStorage per person, and `keepOutbox()` keeps unsent writes. `dbErr()` returns `offline` for network failures; `flush()` then calls `hold()` instead of `fail()`, and the write is retried on a timer and when the phone comes back online. Supabase is still the source of truth: its snapshot replaces the copy. Never cache Supabase responses in the service worker.
 - **The board:** `publishBoard()` upserts two rows (this week and last) into `public.board` with totals from `weekStats()` and `strengthGain()`, the planned workout count, and the name and day of the latest session (`buddyLine()` and `teamGoal()` read those). It talks to Supabase directly, like intake requests, because it isn't a doc. `settings.board === false` means the person opted out, and turning it off deletes their rows. Never add a column that exposes food, bodyweight or individual lifts.
 - **Automatic steps:** Account → Automatic steps calls `new_steps_token()` and shows Shortcut instructions. The Shortcut posts to `/rest/v1/rpc/log_steps` with the publishable key and the token. The step count arrives through the normal Realtime sync.
@@ -103,6 +103,8 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 
 ## Product rules (training logic is evidence-based, so keep it consistent)
 
+**Every rule here has its backing listed in `docs/EVIDENCE.md`**, marked Research or Practice. Before changing a rule or adding one, check the research, update that file, and keep the app's "Where the rules come from" list (`SOURCES`) in step. Don't present a Practice rule in the UI as proven.
+
 - **Progression (double progression):** when the last session hit the top of the rep range on every set, add the exercise's jump and start again at the bottom of the range. Otherwise, the same weight plus one rep on the first set that isn't at the top. Log working sets only, not warm-ups.
 - **Effort:** most sets 0–2 reps short of failure. Isolation exercises can go to failure, and a drop set on the last set of an isolation exercise is fine. Heavy Smith lifts stay 1–2 reps short of failure.
 - **Rest:** 2–3 minutes on compounds, at least 90 seconds on isolation. Rests inside a superset can be shorter.
@@ -115,7 +117,7 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 - **Generated programs:** 3 days = full body A/B/C, 4 = upper/lower ×2, 5 = upper, lower, push, pull, legs, 6 = push/pull/legs ×2. Compounds first, about 10–20 sets per muscle a week. People lifting under a year get at most 3 sets per exercise and 7 exercises per day.
 - **Gym:** Planet Fitness (Smith machine, cable crossover, hack squat, dumbbells, machines). There's no free barbell rack, so suggest exercises that exist there.
 - **Phases:** when the 7-day average reaches the goal weight, offer the next phase. After a bulk: a 6–8 week mini-cut (maintenance −400, 1 g/lb protein, goal about 5% lighter) or keep bulking (+5 lbs). After a cut: hold (maintenance) or lean bulk (+250, goal +8 lbs).
-- **Volume:** about 10–20 hard sets per muscle a week. Main muscles count a full set, helping muscles half.
+- **Volume:** about 10–20 hard sets a week for focus muscles. Main muscles count a full set, helping muscles half. Growth still happens from about 4 sets, so don't call 5–9 sets "low" for a muscle that isn't a focus.
 - **Units:** pounds, inches, US formats.
 
 ## Writing style for UI text and docs
