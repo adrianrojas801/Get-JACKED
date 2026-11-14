@@ -225,6 +225,8 @@ body.setup #nav{display:none}
 .card.upnext{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 .card.exdone>.row.between>.grow>b::after{content:' ✓';color:var(--good)}
 ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inline-block;width:18px;font-weight:700}
+.mlist li{align-items:center}.mlist .grow{flex:1}.mlist li>span:last-child{white-space:nowrap}
+button.star{font-size:17px;padding:0 6px 0 0;color:var(--muted);line-height:1}button.star.on{color:var(--accent)}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
@@ -623,9 +625,9 @@ function hero(d,t){const tot=foodTotals(d);return `<div class="card" id="hero"><
 const sharing=()=>cfg().board!==false;
 const myName=()=>((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email||'').split('@')[0]||'Someone').trim().slice(0,40)||'Someone';
 // Average % change in each lift's best: the 4 weeks up to `end` against the 4 weeks before.
-function strengthGain(end){
+function strengthGain(end,keep){
   const a=addDays(end,-28),b=addDays(end,-56),g=[];
-  for(const n of liftNames()){const h=liftHistory(n,end),now=bestOf(h.filter(x=>x.date>a)),was=bestOf(h.filter(x=>x.date>b&&x.date<=a));if(now&&was&&was.v>0)g.push((now.v/was.v-1)*100)}
+  for(const n of liftNames()){if(keep&&!keep(n))continue;const h=liftHistory(n,end),now=bestOf(h.filter(x=>x.date>a)),was=bestOf(h.filter(x=>x.date>b&&x.date<=a));if(now&&was&&was.v>0)g.push((now.v/was.v-1)*100)}
   return g.length?Math.max(-100,Math.min(500,r1(avg(g)))):null;
 }
 function boardRow(ws){const w=weekStats(ws),end=addDays(ws,6)>today()?today():addDays(ws,6);
@@ -1062,7 +1064,7 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
-  h+=liftsWeekCard(td)+boardCard();
+  h+=liftsWeekCard(td)+musclesCard(td)+boardCard();
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -1092,6 +1094,31 @@ function liftsWeekCard(td){
   if(!up.length&&!stuck.length)return '';
   return `<div class="card"><h2>Lifts this week</h2>${up.length?`<p style="margin:0 0 6px"><span class="good">New bests:</span> ${up.map(esc).join(', ')}</p>`:'<p class="muted" style="margin:0 0 6px">No new bests in the last 7 days.</p>'}
     ${stuck.length?`<p style="margin:0"><span class="warn">Stalled 2+ weeks:</span> ${stuck.map(esc).join(', ')}. Take about 10% off these and build back up.</p>`:''}</div>`;
+}
+// ---------- sets per muscle ----------
+// Hard sets per muscle in the 7 days up to `end`. A lift's main muscles count a full set, helpers half.
+function muscleSets(end){
+  const from=addDays(end,-7),out={};
+  for(const w of Object.values(S.workouts)){if(!w||w.date<=from||w.date>end)continue;
+    for(const e of w.ex||[]){const mm=musFor(e.n),n=setsDone(e).length;if(!mm||!n)continue;
+      mm.p.forEach(k=>{out[k]=(out[k]||0)+n});mm.s.forEach(k=>{out[k]=(out[k]||0)+n*0.5})}}
+  return out;
+}
+const SETS_LO=10,SETS_HI=20;
+const focusList=()=>Array.isArray(cfg().focus)?cfg().focus.filter(k=>MUS_NAME[k]):[];
+const mainLiftOf=k=>n=>{const mm=musFor(n);return !!mm&&mm.p.includes(k)};
+function musclesCard(td){
+  const sets=muscleSets(td),focus=focusList(),inPlan=new Set(Object.values(PROG().days).flatMap(d=>d.ex.flatMap(e=>(musFor(e.n)||{p:[]}).p)));
+  const keys=Object.keys(MUS_NAME).filter(k=>sets[k]||inPlan.has(k)||focus.includes(k));
+  if(!keys.length)return '';
+  keys.sort((a,b)=>focus.includes(b)-focus.includes(a)||(sets[b]||0)-(sets[a]||0));
+  const lv={};for(const k of keys){const v=sets[k]||0;lv[k]=v>=SETS_LO?3:v>=SETS_LO/2?2:v>0?1:0}
+  const row=k=>{const v=r1(sets[k]||0),f=focus.includes(k),g=f?strengthGain(td,mainLiftOf(k)):null;
+    return `<li><button class="link star ${f?'on':''}" data-act="focus" data-k="${k}" aria-pressed="${f}" aria-label="${f?'Remove':'Make'} ${MUS_NAME[k]} a focus">${f?'★':'☆'}</button><span class="grow">${MUS_NAME[k]}${g!=null?` <span class="muted">· lifts ${g>=0?'+':''}${g}%</span>`:''}</span><span class="${v<SETS_LO?'warn':v>SETS_HI?'warn':'good'}">${v} sets${v<SETS_LO?' · low':v>SETS_HI?' · a lot':''}</span></li>`};
+  const low=focus.filter(k=>(sets[k]||0)<SETS_LO).map(k=>MUS_NAME[k]);
+  return `<div class="card"><h2>Sets per muscle</h2><div class="muted">Last 7 days. Aim for about ${SETS_LO}–${SETS_HI} hard sets a week for the muscles you care about most. Tap ☆ to mark a focus.</div>
+    <div style="text-align:center;margin:10px 0 4px">${bodySVG(lv,'mfig-lg')}</div><ul class="mlist">${keys.map(row).join('')}</ul>
+    ${low.length?`<p class="warn" style="margin:8px 0 0">${low.join(' and ')} ${low.length>1?'are':'is'} a focus but under ${SETS_LO} sets. Add a few sets under Plan.</p>`:''}</div>`;
 }
 // Best set ever for each lift, newest record first.
 function recordsCard(names){
@@ -1484,6 +1511,7 @@ app.addEventListener('click',e=>{
   else if(act==='boardwk'){S.boardWeek=ds.v;render()}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);s.calAdj=weekStart(today());putSettings(s);render()}
+  else if(act==='focus'){const s=clone(cfg()),f=focusList();s.focus=f.includes(ds.k)?f.filter(k=>k!==ds.k):[...f,ds.k];putSettings(s);render()}
   else if(act==='checkok'){const s=clone(cfg());s.checkin=weekStart(today());putSettings(s);render()}
   else if(act==='checkshow'||act==='checkhide'){S.showCheckin=act==='checkshow';render()}
   else if(act==='phase'){const p=nextPhases()[i];if(!p||!goalReached())return;const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:p.goal});s.cal=p.cal;s.pro=p.pro;s.goal=p.gw;s.phaseStart=today();putSettings(s);toast(p.label+': targets updated');render()}

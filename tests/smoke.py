@@ -253,6 +253,10 @@ async def main():
         check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at"},
               "Nothing else is sent to the board")
 
+        check("sets per muscle" in app and "lats" in app, "Progress shows weekly sets per muscle")
+        await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
+        check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
+              "Marking a focus muscle saves it and flags it when it's under 10 sets")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
         await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
         s = await settings(page)
