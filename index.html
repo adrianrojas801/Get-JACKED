@@ -1032,13 +1032,13 @@ function viewWorkout(){
     return h;
   }
   h+=`<div style="margin:0 4px">${bar(doneSets,allSets||1)}</div>`;
+  h+=sessionFig(w);
   if(w.done)h+=summary(w,id);
   // One exercise is open at a time; the rest fold to a line. It follows you: the first one with sets left, unless you tap another.
   const open=S.exOpen!=null&&w.ex[S.exOpen]?S.exOpen:w.ex.findIndex(setsLeft);
   w.ex.forEach((e,i)=>{h+=exCard(w,id,i,i===open)});
   if(S.addEx)h+=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Add exercise</h2><button class="small" data-act="axclose">Cancel</button></div><div class="grid3"><input id="axn" placeholder="Name" style="grid-column:1/4"><input id="axs" type="number" inputmode="numeric" value="3" placeholder="sets"><input id="axr" value="8-12" placeholder="reps (8-12)"><button class="primary" data-act="axadd">Add</button></div></div>`;
   else h+=`<button data-act="axopen" style="width:100%;margin:4px 0">+ Add exercise</button>`;
-  h+=sessionFig(w);
   h+=`<div class="card"><label class="f">Session notes<textarea data-wnote="1" placeholder="How it felt, what to change…">${esc(w.note||'')}</textarea></label></div>`;
   h+=`<button class="primary" data-act="finish" style="width:100%;padding:12px">${w.done?'Update finished workout':'Finish workout'}</button>`;
   return h;
