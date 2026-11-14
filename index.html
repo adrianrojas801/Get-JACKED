@@ -557,10 +557,28 @@ function chart(series,{h=150,goal=null,xl=null,yf=v=>Math.round(v)}={}){
 function foodTotals(d){let c=0,p=0;for(const f of d.food||[]){c+=(f.c||0)*(f.q||1);p+=(f.p||0)*(f.q||1)}return {c,p}}
 function bar(v,t){const pct=Math.min(100,Math.round(v/t*100));return `<div class="bar ${v>=t?'done':''}"><div style="width:${pct}%"></div></div>`}
 
-function pq(d,p){return ((d.food||[]).find(f=>f.n===p.n&&f.c===+p.c&&f.p===+p.p)||{}).q||0}
+// ---------- food log ----------
+const sameFood=(f,p)=>f.n===p.n&&f.c===(+p.c||0)&&f.p===(+p.p||0);
+// Adds q of a food to a day (bumps the count if it's already there). Every way of logging food goes through here.
+function addFood(d,p,q=1){const n=String(p.n).trim(),x={n,c:+p.c||0,p:+p.p||0};const ex=d.food.find(f=>sameFood(f,x));if(ex)ex.q=(ex.q||1)+q;else d.food.push(Object.assign(x,{q}));return d}
+// Foods logged in the last 3 weeks that aren't quick-add buttons yet, newest first.
+function recentFoods(k){
+  const ps=presets(),out=[];
+  for(let i=1;i<=21&&out.length<8;i++)for(const f of (S.days[addDays(k,-i)]||{}).food||[])
+    if(out.length<8&&!ps.some(p=>sameFood(f,p))&&!out.some(o=>sameFood(f,o)))out.push({n:f.n,c:f.c,p:f.p});
+  return out;
+}
+// One quick-add food that closes the most of the protein gap without blowing the calories left.
+function proteinIdea(d,t){
+  const tot=foodTotals(d),gap=t.pro-tot.p,left=t.cal-tot.c;if(gap<15)return '';
+  const fits=presets().filter(p=>p.p>=8&&p.c<=Math.max(left,0)+200);if(!fits.length)return '';
+  const pick=fits.sort((a,b)=>Math.min(b.p,gap)-Math.min(a.p,gap)||a.c-b.c)[0];
+  return `<div class="muted" style="margin-top:4px">Idea: ${esc(pick.n)} gets you ${fmt(Math.min(pick.p,gap))} g closer for ${fmt(pick.c)} cal.</div>`;
+}
+function pq(d,p){return ((d.food||[]).find(f=>sameFood(f,p))||{}).q||0}
 function foodSum(d,t){const tot=foodTotals(d);return `<div id="fsum"><div class="row between"><span>Calories</span><span><b data-n="${tot.c}">${fmt(tot.c)}</b> / ${fmt(t.cal)}</span></div>${bar(tot.c,t.cal)}
    <div class="row between"><span>Protein</span><span><b data-n="${tot.p}">${fmt(tot.p)}</b> / ${t.pro} g</span></div>${bar(tot.p,t.pro)}
-   <div class="muted">${tot.p>=t.pro?'<span class="good">Protein hit ✓</span>':`${fmt(t.pro-tot.p)} g protein to go`} · ${tot.c>=t.cal?'calories hit':fmt(t.cal-tot.c)+' cal left'}</div></div>`}
+   <div class="muted">${tot.p>=t.pro?'<span class="good">Protein hit ✓</span>':`${fmt(t.pro-tot.p)} g protein to go`} · ${tot.c>=t.cal?'calories hit':fmt(t.cal-tot.c)+' cal left'}</div>${S.dk===today()?proteinIdea(d,t):''}</div>`}
 function foodLog(d){return `<div id="flog">${(d.food||[]).length?`<h3>Logged</h3><ul class="list">`+d.food.map((f,i)=>`<li data-fn="${esc(f.n)}"><div class="grow">${esc(f.n)}${(f.q||1)>1?` <b>×${f.q}</b>`:''}<div class="muted">${fmt(f.c*(f.q||1))} cal · ${r1(f.p*(f.q||1))} g</div></div><button class="small" data-act="fq" data-i="${i}" data-v="-1">−</button><button class="small" data-act="fq" data-i="${i}" data-v="1">+</button></li>`).join('')+`</ul>`:''}</div>`}
 function countUp(el,a,b){if(a===b)return;const t0=performance.now(),D=450;const st=now=>{const k=Math.min(1,(now-t0)/D),e=1-Math.pow(1-k,3);el.textContent=fmt(a+(b-a)*e);if(k<1)requestAnimationFrame(st)};requestAnimationFrame(st)}
 function refreshFood(d,changed,anchor){
@@ -572,7 +590,7 @@ function refreshFood(d,changed,anchor){
   nfs.querySelectorAll('.bar>div').forEach((x,j)=>{const w=x.style.width;x.style.transition='none';x.style.width=oldW[j]||'0%';void x.offsetWidth;x.style.transition='';x.style.width=w});
   nfs.querySelectorAll('b[data-n]').forEach((x,j)=>{x.textContent=fmt(oldN[j]??0);countUp(x,oldN[j]??0,+x.dataset.n)});
   if(changed){const li=[...$('#flog').querySelectorAll('li')].find(l=>l.dataset.fn===changed);if(li)li.classList.add('pop')}
-  const ps=presets();app.querySelectorAll('button[data-act="preset"]').forEach(c=>{const p=ps[+c.dataset.i];if(!p)return;const q=pq(d,p);c.classList.toggle('has',q>0);const sp=c.querySelector('.qn');if(sp)sp.textContent='×'+q});
+  const src={preset:presets(),recent:recentFoods(S.dk)};app.querySelectorAll('button[data-act="preset"],button[data-act="recent"]').forEach(c=>{const p=src[c.dataset.act][+c.dataset.i];if(!p)return;const q=pq(d,p);c.classList.toggle('has',q>0);const sp=c.querySelector('.qn');if(sp)sp.textContent='×'+q});
   if(anchor&&y0!=null){const dy=anchor.getBoundingClientRect().top-y0;if(dy)window.scrollBy({top:dy,behavior:'instant'})}
 }
 function viewToday(){
@@ -594,6 +612,11 @@ function viewToday(){
   for(const g of Object.keys(groups)){const arr=groups[g];h+=`<div class="muted" style="margin:8px 0 4px">${esc(g)}</div>`;if(!arr.length){h+=`<div class="muted" style="font-size:12px;opacity:.7">Nothing here yet</div>`;continue}
     if(S.qedit)h+=`<ul class="list qlist">`+arr.map(([p,i],j)=>`<li><div class="grow">${esc(p.n)}<div class="muted">${p.c} cal · ${p.p}g</div></div><button class="small" data-act="qmove" data-i="${i}" data-v="-1" ${j===0?'disabled':''} aria-label="Move up">↑</button><button class="small" data-act="qmove" data-i="${i}" data-v="1" ${j===arr.length-1?'disabled':''} aria-label="Move down">↓</button><button class="small qx" data-act="qdel" data-i="${i}" aria-label="Delete">✕</button></li>`).join('')+`</ul>`;
     else h+=`<div class="chips">`+arr.map(([p,i])=>{const q=pq(d,p);return `<button class="${q?'has':''}" data-act="preset" data-i="${i}">${esc(p.n)}<br><span class="muted">${p.c} cal · ${p.p}g</span><span class="qn">×${q}</span></button>`}).join('')+`</div>`}
+  const rc=recentFoods(k),yd=S.days[addDays(k,-1)],yt=yd&&(yd.food||[]).length?foodTotals(yd):null;
+  if(rc.length){h+=`<div class="muted" style="margin:8px 0 4px">Recent</div>`;
+    if(S.qedit)h+=`<ul class="list qlist">`+rc.map((p,i)=>`<li><div class="grow">${esc(p.n)}<div class="muted">${p.c} cal · ${p.p}g</div></div><button class="small" data-act="rckeep" data-i="${i}">Keep as quick add</button></li>`).join('')+`</ul>`;
+    else h+=`<div class="chips">`+rc.map((p,i)=>{const q=pq(d,p);return `<button class="${q?'has':''}" data-act="recent" data-i="${i}">${esc(p.n)}<br><span class="muted">${p.c} cal · ${p.p}g</span><span class="qn">×${q}</span></button>`}).join('')+`</div>`}
+  if(yt&&!(d.food||[]).length)h+=`<button class="small" data-act="copyday" style="margin-top:12px">Log the same as yesterday (${fmt(yt.c)} cal · ${fmt(yt.p)} g)</button>`;
   h+=`<h3>Custom</h3><div class="row"><input id="cn" placeholder="Food" class="grow"><input id="cc" type="number" inputmode="numeric" placeholder="cal" style="width:70px"><input id="cp" type="number" inputmode="decimal" placeholder="prot (g)" style="width:86px"><button data-act="custom">Add</button></div>
    <div class="muted" style="margin-top:6px">Preset numbers are estimates. Edit them in the Plan tab.</div>${foodLog(d)}</div>`;
   return h;
@@ -1178,20 +1201,22 @@ app.addEventListener('click',e=>{
     const s=clone(cfg());if(!s.program)return;delete s.program.days[ds.k];s.program.order=s.program.order.filter(x=>x!==ds.k);s.program.sched=s.program.sched.map(x=>x===ds.k?'rest':x);S.delDay=null;putSettings(s);render()}
   else if(act==='qmove'){const ps=clone(presets());const p=ps[i];if(!p)return;const g=p.g||'Other';const dir=+ds.v;let j=i+dir;while(j>=0&&j<ps.length&&(ps[j].g||'Other')!==g)j+=dir;if(j<0||j>=ps.length)return;[ps[i],ps[j]]=[ps[j],ps[i]];const s=clone(cfg());s.presets=ps;putSettings(s);render()}
   else if(act==='qdel'){const p=presets()[i];if(!p)return;const s=clone(cfg());const ps=clone(presets());ps.splice(i,1);s.presets=ps;putSettings(s);render()}
-  else if(act==='preset'){const p=presets()[i];if(!p)return;const d=dayDoc(S.dk);const ex=d.food.find(f=>f.n===p.n&&f.c===+p.c&&f.p===+p.p);if(ex)ex.q=(ex.q||1)+1;else d.food.push({n:p.n,c:+p.c||0,p:+p.p||0,q:1});putDay(S.dk,d);refreshFood(d,p.n);
+  else if(act==='preset'||act==='recent'){const p=(act==='preset'?presets():recentFoods(S.dk))[i];if(!p)return;const d=addFood(dayDoc(S.dk),p);putDay(S.dk,d);refreshFood(d,p.n);
     const sp=b.querySelector('.qn');if(sp){sp.classList.remove('pop');void sp.offsetWidth;sp.classList.add('pop')}b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring');
     try{navigator.vibrate&&navigator.vibrate(15)}catch(x){}}
+  else if(act==='rckeep'){const p=recentFoods(S.dk)[i];if(!p)return;const s=clone(cfg());const ps=clone(presets());const gs=foodGroups();ps.push(Object.assign({g:gs.includes('Snacks')?'Snacks':gs[0]||'Other'},p));s.presets=ps;putSettings(s);render()}
+  else if(act==='copyday'){const y=S.days[addDays(S.dk,-1)];if(!y)return;const d=dayDoc(S.dk);for(const f of y.food||[])addFood(d,f,f.q||1);putDay(S.dk,d);render()}
   else if(act==='fq'){const d=dayDoc(S.dk);const f=d.food[i];if(!f)return;f.q=(f.q||1)+(+ds.v);const nm=f.q>0?f.n:null;if(f.q<=0)d.food.splice(i,1);putDay(S.dk,d);refreshFood(d,nm)}
   else if(act==='snap'){if(!(S.snap&&S.snap.busy))runSnap()}
   else if(act==='snapclear'){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapUrl=null;S.snapFile=null;render()}
   else if(act==='snapdel'){if(S.snap&&S.snap.items){S.snap.items.splice(i,1);render()}}
   else if(act==='snapcancel'){clearSnap();render()}
   else if(act==='snapadd'){const items=(S.snap&&S.snap.items||[]).filter(x=>String(x.n).trim());if(!items.length)return;
-    const d=dayDoc(S.dk);for(const x of items){const n=String(x.n).trim(),c=+x.c||0,p=+x.p||0,q=Math.max(1,Math.round(+x.q||1));const ex=d.food.find(f=>f.n===n&&f.c===c&&f.p===p);if(ex)ex.q=(ex.q||1)+q;else d.food.push({n,c,p,q})}
+    const d=dayDoc(S.dk);for(const x of items)addFood(d,x,Math.max(1,Math.round(+x.q||1)));
     putDay(S.dk,d);
     const sv=$('#snapsave');if(sv&&sv.checked){const st=clone(cfg());const ps=clone(presets());for(const x of items){const n=String(x.n).trim();if(!ps.some(y=>y.n===n))ps.push({g:'Snapped',n,c:+x.c||0,p:+x.p||0})}st.presets=ps;putSettings(st)}
     clearSnap();render()}
-  else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=dayDoc(S.dk);d.food.push({n,c:c||0,p:p||0,q:1});putDay(S.dk,d);render()}
+  else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=addFood(dayDoc(S.dk),{n,c,p});putDay(S.dk,d);render()}
   else if(act==='setdone'){const w=curWorkout(),ex=w.ex[i],s=ex.sets[+ds.j];
     if(!s.d){const last=lastFor(ex.n,w.date,wid(w.date,w.prog));const ls=last&&last.sets[Math.min(+ds.j,last.sets.length-1)];
       const prev=+ds.j>0?ex.sets[+ds.j-1]:null;const src=(prev&&prev.d)?prev:ls;
