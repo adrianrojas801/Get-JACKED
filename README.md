@@ -22,8 +22,12 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 
 Logs are private. Two things are shared on purpose:
 
-- **The board** (Progress tab): four weekly totals per person, which are workouts, protein days, average steps and strength change. Turn it off under your account with **Show me on the board**.
+- **The board** (Progress tab): weekly totals per person (workouts done and planned, protein days, average steps, strength change) plus the name and day of their latest session. Turn it off under your account with **Show me on the board**.
 - **Intake answers**: sent to the admin once, so a custom program can be written.
+
+### Using it with no signal
+
+Once you've opened the app on your phone while online, it opens and logs without a connection. The status under your initial says **Offline · saved on this phone**, and everything sends when you're back online. Signing out clears the copy kept on the phone.
 
 ### Automatic steps
 

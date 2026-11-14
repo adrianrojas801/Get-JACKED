@@ -30,6 +30,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 | Path | What it is |
 |---|---|
 | `index.html` | The whole app: CSS, markup and vanilla JS in one file |
+| `sw.js` | Service worker that keeps the app's own files on the phone so it opens offline |
 | `config.js` | Supabase project URL and **publishable** key (public by design) |
 | `vendor/supabase.js` | supabase-js 2.119.0 browser build, kept in the repo (no CDN at runtime) |
 | `manifest.webmanifest`, `icons/` | PWA name, colors and icons |
@@ -47,7 +48,12 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Per-person programs:** each person's program lives in `settings/main` as `program = {days:{key:{t, ex:[{n,s,r,rest,ss?,note?}]}}, order, sched}` (`sched` is Sun–Sat, a day key or `'rest'`). Read it through `PROG()`, `dayOf()`, `titleOf()` and `schedOn()`, never a hard-coded program. New people get one from the intake form (`calcTargets` + `buildProgram`). `LEGACY_PROGRAM` is the owner's original program and is only used once by `ensureProgram()` to move him over (`settings.legacy = true` keeps his personal notes, food groups and cheat sheet). Never show legacy-only content to anyone else.
 - **Custom programs:** the intake also sends open-ended answers to `intake_requests`. The admin's Account page lists them, **Copy for Claude** builds a prompt (`reqPrompt`) with the answers, the training rules and the JSON format (`PLAN_FORMAT`), and **Send program** checks the pasted JSON with `normPlan()` before sending. The person gets a "new program is ready" card and chooses **Use it**. Keep `reqPrompt`'s rules in line with the product rules below.
 - **Shared helpers, use them instead of re-deriving:** lift math goes through `bestSet()`, `liftHistory()`, `bestOf()`, `stallOf()`, `isBest()` and `volumeOf()`; week totals through `weekStats()`, `streaks()` and `plannedPerWeek()`; every way of logging food through `addFood()`. Bodyweight lifts (no weight entered) are tracked by reps.
-- **The board:** `publishBoard()` upserts two rows (this week and last) into `public.board` with four totals from `weekStats()` and `strengthGain()`. It talks to Supabase directly, like intake requests, because it isn't a doc. `settings.board === false` means the person opted out, and turning it off deletes their rows. Never add a column that exposes food, bodyweight or individual lifts.
+- **Targets:** `targetFor(last, ex, stall)` is the one place that decides what to aim for today (double progression, stall back-off). The Workout tab shows it, uses it as the placeholders, and Done on an empty set logs it. The weight to add comes from `jumpFor()`: the exercise's `inc` in the program, else 10 lbs on Smith lifts and 5 elsewhere.
+- **Weekly advice:** `weightTrend(end)` gives the weight verdict and calorie change for the current goal; `calButton()` allows one change a week (`settings.calAdj`). `checkinCard()` builds the weekly check-in from `weekStats()`, `weightTrend()` and `liftsMoved()`; `settings.checkin` holds the week it was last dismissed.
+- **Goal phases:** `settings.profile.goal` is the phase and `settings.phaseStart` its start date. `nextPhases()` works out the targets for the next phase from the current ones with `GOAL_ADJ`, and is only offered once `goalReached()`.
+- **Muscles:** `muscleSets(end)` counts hard sets per muscle from `musFor()`. `settings.focus` is the list of focus muscle keys.
+- **Offline:** `sw.js` caches the app's own files (network-first, same-origin GETs only; bump `CACHE` when the file list changes). `keepCopy()`/`openCopy()` keep the last synced data in localStorage per person, and `keepOutbox()` keeps unsent writes. `dbErr()` returns `offline` for network failures; `flush()` then calls `hold()` instead of `fail()`, and the write is retried on a timer and when the phone comes back online. Supabase is still the source of truth: its snapshot replaces the copy. Never cache Supabase responses in the service worker.
+- **The board:** `publishBoard()` upserts two rows (this week and last) into `public.board` with totals from `weekStats()` and `strengthGain()`, the planned workout count, and the name and day of the latest session (`buddyLine()` and `teamGoal()` read those). It talks to Supabase directly, like intake requests, because it isn't a doc. `settings.board === false` means the person opted out, and turning it off deletes their rows. Never add a column that exposes food, bodyweight or individual lifts.
 - **Automatic steps:** Account → Automatic steps calls `new_steps_token()` and shows Shortcut instructions. The Shortcut posts to `/rest/v1/rpc/log_steps` with the publishable key and the token. The step count arrives through the normal Realtime sync.
 - **Writes:** `set` means a full upsert. `update` means the `patch_doc` RPC (a top-level `jsonb ||` merge). Field-level edits must use the patch path so two devices don't overwrite each other.
 - **Save pipeline:** `save()` / `flush()` / `pending{}` writes taps instantly, debounces typing by about 700 ms, writes one document at a time, retries once on `unavailable`, flushes on `pagehide`/`visibilitychange`, and shows "Not saved yet…" after 5 seconds. Snapshots for docs with pending writes are skipped. Don't regress any of this.
@@ -71,7 +77,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 CI (`.github/workflows/ci.yml`) runs these on every PR. Run them locally before pushing:
 
 ```bash
-node tests/check_syntax.js     # inline <script> + config.js syntax
+node tests/check_syntax.js     # inline <script>, config.js and sw.js syntax
 python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, definer functions locked down, naming
 python3 tests/check_db.py      # runs migrations twice on a local Postgres and checks who can read/write what
 python3 tests/smoke.py         # headless sign-in, intake, editor, save, reload (mocked Supabase)
@@ -94,7 +100,7 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 
 ## Product rules (training logic is evidence-based, so keep it consistent)
 
-- **Progression (double progression):** when the last session hit the top of the rep range on every set, suggest adding weight. Otherwise, suggest the same weight plus a rep. Log working sets only, not warm-ups.
+- **Progression (double progression):** when the last session hit the top of the rep range on every set, add the exercise's jump and start again at the bottom of the range. Otherwise, the same weight plus one rep on the first set that isn't at the top. Log working sets only, not warm-ups.
 - **Effort:** most sets 0–2 reps short of failure. Isolation exercises can go to failure, and a drop set on the last set of an isolation exercise is fine. Heavy Smith lifts stay 1–2 reps short of failure.
 - **Rest:** 2–3 minutes on compounds, at least 90 seconds on isolation. Rests inside a superset can be shorter.
 - **No scheduled deloads.** Suggest an easier week only after a stall of 2+ weeks or when the person feels beat up. A stall is 3+ sessions and 2+ weeks without beating the lift's best (`stallOf`); the suggestion is about 10% off, then build back up.
@@ -105,6 +111,8 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 - **Intake targets:** Mifflin-St Jeor × activity (1.4 / 1.55 / 1.75, which already counts the lifting), then +250 bulk, −400 cut, 0 maintain, rounded to 50, with a floor of 1,600 (men) / 1,300 (women). Protein 0.9 g/lb (1 g/lb on a cut), capped at 220 g.
 - **Generated programs:** 3 days = full body A/B/C, 4 = upper/lower ×2, 5 = upper, lower, push, pull, legs, 6 = push/pull/legs ×2. Compounds first, about 10–20 sets per muscle a week. People lifting under a year get at most 3 sets per exercise and 7 exercises per day.
 - **Gym:** Planet Fitness (Smith machine, cable crossover, hack squat, dumbbells, machines). There's no free barbell rack, so suggest exercises that exist there.
+- **Phases:** when the 7-day average reaches the goal weight, offer the next phase. After a bulk: a 6–8 week mini-cut (maintenance −400, 1 g/lb protein, goal about 5% lighter) or keep bulking (+5 lbs). After a cut: hold (maintenance) or lean bulk (+250, goal +8 lbs).
+- **Volume:** about 10–20 hard sets per muscle a week. Main muscles count a full set, helping muscles half.
 - **Units:** pounds, inches, US formats.
 
 ## Writing style for UI text and docs
