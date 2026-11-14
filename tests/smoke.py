@@ -211,12 +211,19 @@ async def main():
             seed[f"workouts/{ago(n)}_a"] = {"date": ago(n), "prog": "a", "title": "Back day", "done": True, "ex": [lift(120, reps)]}
         seed[f"workouts/{ago(7)}_a"]["ex"].append({"n": "Cable curl", "s": 3, "r": "10-12", "rest": 60, "ti": 1,
                                                    "sets": [{"w": 40, "r": r, "d": True} for r in (10, 10, 9)]})
+        for n in (2, 3, 4):
+            seed[f"days/{ago(n)}"] = {"date": ago(n), "food": [], "weight": 171}
         buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2}]
         page = await new_page(browser, errors, seed, buddy)
         await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
         app = (await page.inner_text("#app")).lower()
         check(await page.locator("#hero .ring").count() == 3 and await page.locator(".wkstrip .wd").count() == 7
               and "workouts this week" in app, "Today shows the three rings and the week strip")
+        check("week check-in" in app and "1 of 7 workouts" in app and "stalled: lat pulldown" in app,
+              "Today opens with last week's check-in")
+        await page.click("button[data-act=checkok]"); await page.wait_for_timeout(300)
+        check("week check-in" not in (await page.inner_text("#app")).lower() and (await settings(page)).get("checkin") == sunday,
+              "Got it puts the check-in away until next week")
         check("recent" in app and "same as yesterday" in app and "idea:" in app,
               "Today offers recent foods, yesterday's log and a protein idea")
         await page.click("button[data-act=recent]"); await page.wait_for_timeout(300)
@@ -245,6 +252,14 @@ async def main():
               "The board shows you next to your friend, with only weekly totals shared")
         check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at"},
               "Nothing else is sent to the board")
+
+        check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
+        s = await settings(page)
+        check(s["profile"]["goal"] == "cut" and s["cal"] == 1750 and s["pro"] == 170 and s["goal"] == 162 and s["phaseStart"] == ago(0),
+              "Choosing a mini-cut sets the new calorie, protein and goal-weight targets")
+        await page.click("button[data-act=checkshow]"); await page.wait_for_timeout(200)
+        check("week check-in" in (await page.inner_text("#app")).lower(), "The check-in can be reopened from Progress")
 
         await page.click("#me"); await page.wait_for_timeout(300)
         await page.click("#acboard"); await page.wait_for_timeout(300)

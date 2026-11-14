@@ -224,6 +224,7 @@ body.setup #nav{display:none}
 .intake-rest{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .card.upnext{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 .card.exdone>.row.between>.grow>b::after{content:' ✓';color:var(--good)}
+ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inline-block;width:18px;font-weight:700}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
@@ -374,7 +375,7 @@ function calcTargets(p){
   const kg=p.weight*0.4536,cm=(p.ft*12+(p.inch||0))*2.54;
   const bmr=10*kg+6.25*cm-5*p.age+(p.sex==='f'?-161:5);
   const tdee=bmr*(ACT[p.act]||ACT.mid)[1];
-  let cal=Math.round((tdee+({bulk:250,cut:-400,maintain:0}[p.goal]||0))/50)*50;
+  let cal=Math.round((tdee+(GOAL_ADJ[p.goal]||0))/50)*50;
   cal=Math.max(cal,p.sex==='f'?1300:1600);
   const pro=Math.min(220,Math.round(p.weight*(p.goal==='cut'?1:0.9)/5)*5);
   const goal=p.gw||Math.round(p.weight+({bulk:8,cut:-10,maintain:0}[p.goal]||0));
@@ -732,6 +733,7 @@ function viewToday(){
   let h=`<div class="row between"><button data-act="day" data-v="-1">◀</button><b>${isToday?'Today · ':''}${nice(k)}</b><div class="row"><button data-act="day" data-v="1" ${isToday?'disabled style="visibility:hidden" aria-hidden="true"':''}>▶</button></div></div>`;
   if(!isToday)h+=`<div style="text-align:center"><button class="link" data-act="gotoday">Jump to today</button></div>`;
   h+=newPlanCard();
+  if(isToday&&checkinDue())h+=checkinCard(true);
   h+=hero(d,t);
   {const sk=streaks(),plan=plannedPerWeek(),wk=weekStats(weekStart(k));
    h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">${trainedDates().has(k)?'Open workout ✓':'Open workout'}</button>`}</div>
@@ -941,31 +943,110 @@ function weightSeries(){
   return {dots,avgp,start,end};
 }
 function win(endKey,n,f){const out=[];for(let i=0;i<n;i++){const d=S.days[addDays(endKey,-i)];if(!d)continue;const v=f(d);if(v!=null&&!isNaN(v))out.push(v)}return out}
+// Calories added to (or taken off) maintenance for each goal. Used by the intake and when switching phase.
+const GOAL_ADJ={bulk:250,cut:-400,maintain:0};
+// The 7-day average up to `end` against the 7 days before it, and what that means for the current goal.
+// Returns {A,B,ch,ok,text,adj}: adj is the calorie change to suggest (+150, −150 or 0).
+function weightTrend(end){
+  const wv=d=>num(d.weight),a=win(end,7,wv),b=win(addDays(end,-7),7,wv),A=avg(a),B=avg(b),g=goalOf();
+  const o={A,B,ch:null,ok:null,adj:0,text:'Weigh in at least 3 mornings a week (after the bathroom, before eating) to see your trend.'};
+  if(a.length<3||b.length<3)return o;
+  const ch=o.ch=A-B,say=(ok,text,adj=0)=>Object.assign(o,{ok,text,adj});
+  if(g==='cut'){const loss=-ch,lo=A*0.005,hi=A*0.01;
+    if(loss<lo*0.6)return say(false,`${ch>0?'Gaining':'Losing'} ${r1(Math.abs(ch))} lbs/wk. The target is ${r1(lo)}–${r1(hi)} lbs/wk. Eat about 150 cal less a day.`,-150);
+    if(loss>hi*1.25)return say(false,`Losing ${r1(loss)} lbs/wk. That’s too fast, so you’ll lose more muscle. Eat about 150 cal more a day.`,150);
+    return say(true,`Losing ${r1(loss)} lbs/wk. You’re on track.`)}
+  if(g==='maintain'){
+    if(ch>0.3)return say(false,`Up ${r1(ch)} lbs this week. Eat about 150 cal less a day if it keeps climbing.`,-150);
+    if(ch<-0.3)return say(false,`Down ${r1(-ch)} lbs this week. Eat about 150 cal more a day if it keeps dropping.`,150);
+    return say(true,`Weight is steady (${ch>=0?'+':''}${r1(ch)} lbs). You’re on track.`)}
+  if(ch<0.15)return say(false,`Gaining ${r1(ch)} lbs/wk. That’s below the 0.25–0.5 target. Add about 150 cal a day.`,150);
+  if(ch>0.6)return say(false,`Gaining ${r1(ch)} lbs/wk. That’s too fast, so more of it will be fat. Cut about 150 cal a day.`,-150);
+  return say(true,`Gaining ${r1(ch)} lbs/wk. You’re on track.`);
+}
+const trendText=tr=>tr.ok==null?tr.text:`<span class="${tr.ok?'good':'warn'}">${tr.text}</span>`;
+// One calorie change a week is enough: after you take it, the button turns into a note until next Sunday.
+function calButton(adj){
+  if(!adj)return '';
+  if(cfg().calAdj===weekStart(today()))return '<div class="muted">Calorie target changed this week ✓ Give it a week before changing it again.</div>';
+  return `<button class="small" data-act="adjcal" data-v="${adj}">${adj>0?'Raise':'Lower'} target to ${fmt(T().cal+adj)}</button>`;
+}
+
+// ---------- goal phases ----------
+// Pace in lbs/week over the last 3 weeks (steadier than one week), falling back to the last week.
+function pace(){
+  const td=today(),wv=d=>num(d.weight),now=win(td,7,wv),then=win(addDays(td,-21),7,wv);
+  if(now.length>=3&&then.length>=3)return (avg(now)-avg(then))/3;
+  return weightTrend(td).ch;
+}
+// "At this pace you reach 173 lbs around Feb 20", or '' when there's no goal to move toward or no clear pace.
+function etaText(){
+  const g=goalOf(),A=weightTrend(today()).A,goal=T().goal,rate=pace();
+  if(g==='maintain'||!A||rate==null)return '';
+  const gap=goal-A;if(g==='bulk'?gap<=0:gap>=0)return '';
+  if(Math.sign(rate)!==Math.sign(gap)||Math.abs(rate)<0.05)return '';
+  const wks=gap/rate;if(wks>78)return '';
+  return `At this pace you reach ${goal} lbs around ${parseKey(addDays(today(),Math.round(wks*7))).toLocaleDateString(undefined,{month:'short',day:'numeric'})}.`;
+}
+const goalReached=()=>{const g=goalOf(),A=weightTrend(today()).A,goal=T().goal;return !!A&&(g==='bulk'?A>=goal:g==='cut'?A<=goal:false)};
+// What can come next once the goal weight is reached, with targets worked out from the current ones.
+function nextPhases(){
+  const t=T(),A=Math.round(weightTrend(today()).A),g=goalOf(),maint=t.cal-GOAL_ADJ[g],r50=v=>Math.round(v/50)*50,pro=m=>Math.min(220,Math.round(A*m/5)*5);
+  if(g==='bulk')return [
+    {goal:'cut',label:'Start a mini-cut',why:'6–8 weeks to lean out, then bulk again.',cal:Math.max(1600,r50(maint+GOAL_ADJ.cut)),pro:pro(1),gw:Math.round(A*0.95)},
+    {goal:'bulk',label:'Keep bulking',why:'Stay on the same calories and aim higher.',cal:t.cal,pro:t.pro,gw:t.goal+5}];
+  return [
+    {goal:'maintain',label:'Hold this weight',why:'Eat at maintenance and keep getting stronger.',cal:r50(maint),pro:pro(0.9),gw:A},
+    {goal:'bulk',label:'Start a lean bulk',why:'Add muscle at 0.25–0.5 lb a week.',cal:r50(maint+GOAL_ADJ.bulk),pro:pro(0.9),gw:A+8}];
+}
+function phaseCard(){
+  if(!goalReached())return '';
+  return `<div class="card newplan"><h2>You reached ${T().goal} lbs</h2><p class="muted" style="margin-top:0">Pick what’s next. This changes your calorie, protein and goal-weight targets. Your program stays the same.</p>
+    ${nextPhases().map((p,i)=>`<div class="row between" style="margin-top:10px"><div class="grow"><b>${p.label}</b><div class="muted">${p.why} ${fmt(p.cal)} cal · ${p.pro} g protein · goal ${p.gw} lbs</div></div><button class="small ${i?'':'primary'}" data-act="phase" data-i="${i}">Choose</button></div>`).join('')}</div>`;
+}
+const phaseLine=()=>{const ps=cfg().phaseStart,wk=ps?Math.floor(daysBetween(ps,today())/7)+1:null;return GOALS[goalOf()]+(wk>0?` · week ${wk}`:'')};
+
+// ---------- weekly check-in ----------
+// New bests set and lifts stalled between two dates. Shared by the check-in and "Lifts this week".
+function liftsMoved(from,to){
+  const up=[],stuck=[];
+  for(const n of liftNames()){const hist=liftHistory(n,to),last=hist[hist.length-1];if(!last||last.date<addDays(to,-21))continue;
+    const top=bestOf(hist);
+    if(hist.length>1&&top.date>from)up.push(`${n} ${top.top}`);else if(stallOf(hist))stuck.push(n)}
+  return {up,stuck};
+}
+const lastWeek=()=>addDays(weekStart(today()),-7);
+const checkinDue=()=>{const w=weekStats(lastWeek());return cfg().checkin!==weekStart(today())&&(w.workouts>0||w.cal>0)};
+// Last week in one card: what happened, and the few things to change this week.
+function checkinCard(canDismiss){
+  const ws=lastWeek(),end=addDays(ws,6),w=weekStats(ws),plan=plannedPerWeek(),t=T(),tr=weightTrend(end),lm=liftsMoved(addDays(ws,-1),end);
+  const line=(ok,txt)=>`<li><span class="${ok?'good':'warn'}">${ok?'✓':'!'}</span> ${txt}</li>`,todo=[];
+  let h=`<div class="card ${canDismiss?'newplan':''}" id="checkin"><h2>Week check-in</h2><div class="muted">${short(ws)} – ${short(end)}</div><ul class="plain ticks">`;
+  h+=line(plan&&w.workouts>=plan,`${w.workouts} of ${plan||'–'} workouts`);
+  if(plan&&w.workouts<plan)todo.push(`Get all ${plan} workouts in. If a day keeps getting missed, move it under Plan.`);
+  if(w.cal){h+=line(w.proteinDays>=5,`Protein hit ${w.proteinDays} of 7 days · averaged ${fmt(w.cal)} cal`);
+    if(w.proteinDays<5)todo.push(`Hit ${t.pro} g protein at least 5 days. Get some at every meal and add a shake when you’re behind.`)}
+  else{h+=line(false,'No food logged');todo.push('Log your food most days, so the calorie advice is based on what you eat.')}
+  if(tr.ch!=null)h+=line(tr.ok,tr.text);
+  else todo.push('Weigh in at least 3 mornings, so the app can tell if your calories are right.');
+  if(lm.up.length)h+=line(true,`New bests: ${lm.up.map(esc).join(', ')}`);
+  if(lm.stuck.length){h+=line(false,`Stalled: ${lm.stuck.map(esc).join(', ')}`);todo.push('Stalled lifts have lighter targets next time. Hit the top of the rep range, then build back up.')}
+  if(w.steps)h+=line(w.steps>=STEP_GOAL,`${fmt(w.steps)} steps a day`);
+  h+=`</ul>`;
+  if(tr.adj||todo.length)h+=`<h3>This week</h3>${tr.adj?`<div style="margin-bottom:8px">${calButton(tr.adj)}</div>`:''}<ul class="plain">${todo.slice(0,3).map(x=>`<li>${x}</li>`).join('')}</ul>`;
+  else h+=`<p class="good" style="margin:8px 0 0">Everything’s on track. Keep doing what you’re doing.</p>`;
+  return h+`<div class="row" style="margin-top:10px"><button class="small ${canDismiss?'primary':''}" data-act="${canDismiss?'checkok':'checkhide'}">${canDismiss?'Got it':'Close'}</button></div></div>`;
+}
+
 function viewProgress(){
-  const t=T(),td=today();
-  const wv=d=>num(d.weight);
-  const a=win(td,7,wv),b=win(addDays(td,-7),7,wv);
-  const A=avg(a),B=avg(b);
-  let verdict='Weigh in at least 3 mornings a week (after the bathroom, before eating) to see your trend.';let adj='';
-  if(a.length>=3&&b.length>=3){const ch=A-B,g=goalOf();
-    const up=v=>`<button class="small" data-act="adjcal" data-v="150">Raise target to ${t.cal+150}</button>`,down=v=>`<button class="small" data-act="adjcal" data-v="-150">Lower target to ${t.cal-150}</button>`;
-    if(g==='cut'){const loss=-ch,lo=A*0.005,hi=A*0.01;
-      if(loss<lo*0.6){verdict=`<span class="warn">${ch>0?'Gaining':'Losing'} ${r1(Math.abs(ch))} lbs/wk. The target is ${r1(lo)}–${r1(hi)} lbs/wk. Eat about 150 cal less a day.</span>`;adj=down()}
-      else if(loss>hi*1.25){verdict=`<span class="warn">Losing ${r1(loss)} lbs/wk. That’s too fast, so you’ll lose more muscle. Eat about 150 cal more a day.</span>`;adj=up()}
-      else verdict=`<span class="good">Losing ${r1(loss)} lbs/wk. You’re on track.</span>`}
-    else if(g==='maintain'){
-      if(ch>0.3){verdict=`<span class="warn">Up ${r1(ch)} lbs this week. Eat about 150 cal less a day if it keeps climbing.</span>`;adj=down()}
-      else if(ch<-0.3){verdict=`<span class="warn">Down ${r1(-ch)} lbs this week. Eat about 150 cal more a day if it keeps dropping.</span>`;adj=up()}
-      else verdict=`<span class="good">Weight is steady (${ch>=0?'+':''}${r1(ch)} lbs). You’re on track.</span>`}
-    else{
-      if(ch<0.15){verdict=`<span class="warn">Gaining ${r1(ch)} lbs/wk. That’s below the 0.25–0.5 target. Add about 150 cal a day.</span>`;adj=up()}
-      else if(ch>0.6){verdict=`<span class="warn">Gaining ${r1(ch)} lbs/wk. That’s too fast, so more of it will be fat. Cut about 150 cal a day.</span>`;adj=down()}
-      else verdict=`<span class="good">Gaining ${r1(ch)} lbs/wk. You’re on track.</span>`}}
+  const t=T(),td=today(),wv=d=>num(d.weight);
+  const tr=weightTrend(td),A=tr.A,B=tr.B,verdict=trendText(tr),adj=calButton(tr.adj),eta=etaText();
   const ws=weightSeries();
   let h=`<div class="card"><h2>Bodyweight</h2><div class="kpis"><div class="kpi"><b>${A?r1(A):'–'}</b><span>7-day avg (lbs)</span></div><div class="kpi"><b>${A&&B?(A-B>=0?'+':'')+r1(A-B):'–'}</b><span>vs previous week</span></div></div>
-    <p style="margin:10px 0 6px">${verdict}</p>${adj}
+    <p style="margin:10px 0 6px">${verdict}</p>${adj}${eta?`<p class="muted" style="margin:8px 0 0">${eta}</p>`:''}
     ${chart([{pts:ws.dots,color:'var(--muted)',dots:true},{pts:ws.avgp,color:'var(--accent)'}],{goal:t.goal,xl:[short(ws.start),short(ws.end)]})}
     <div class="muted">Dots are daily weigh-ins and the line is the 7-day average. ${goalOf()==='bulk'?'The goal for this bulk is':'Your goal weight is'} ${t.goal} lbs.</div></div>`;
+  h=(S.showCheckin?checkinCard(false):`<button class="small" data-act="checkshow" style="margin:4px 0">Last week’s check-in</button>`)+h+phaseCard();
   // nutrition & habits (last 7 full days)
   const y=addDays(td,-1);const fd=[];for(let i=0;i<7;i++){const d=S.days[addDays(y,-i)];if(d&&(d.food||[]).length)fd.push(foodTotals(d))}
   const pHit=fd.filter(x=>x.p>=t.pro).length;
@@ -1007,10 +1088,7 @@ function viewProgress(){
 }
 // Which lifts set a new best in the last 7 days, and which have stalled.
 function liftsWeekCard(td){
-  const wk=addDays(td,-7),up=[],stuck=[];
-  for(const n of liftNames()){const hist=liftHistory(n),last=hist[hist.length-1];if(!last||last.date<addDays(td,-21))continue;
-    const top=bestOf(hist);
-    if(hist.length>1&&top.date>wk)up.push(`${n} ${top.top}`);else if(stallOf(hist))stuck.push(n)}
+  const {up,stuck}=liftsMoved(addDays(td,-7),td);
   if(!up.length&&!stuck.length)return '';
   return `<div class="card"><h2>Lifts this week</h2>${up.length?`<p style="margin:0 0 6px"><span class="good">New bests:</span> ${up.map(esc).join(', ')}</p>`:'<p class="muted" style="margin:0 0 6px">No new bests in the last 7 days.</p>'}
     ${stuck.length?`<p style="margin:0"><span class="warn">Stalled 2+ weeks:</span> ${stuck.map(esc).join(', ')}. Take about 10% off these and build back up.</p>`:''}</div>`;
@@ -1244,7 +1322,9 @@ function viewPlan(){
     <label class="f">Calories / day<input type="number" inputmode="numeric" data-set="cal" value="${t.cal}"></label>
     <label class="f">Protein (g) / day<input type="number" inputmode="numeric" data-set="pro" value="${t.pro}"></label>
     <label class="f">Goal weight (lbs)<input type="number" inputmode="decimal" data-set="goal" value="${t.goal}"></label>
-    <label class="f">Block start date<input type="date" data-set="block" value="${t.block||''}"></label></div>
+    <label class="f">Block start date<input type="date" data-set="block" value="${t.block||''}"></label>
+    <label class="f" style="grid-column:1/3">Goal<select id="goalsel">${Object.entries(GOALS).map(([v,l])=>`<option value="${v}" ${goalOf()===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label></div>
+    <div class="muted" style="margin-top:6px">${esc(phaseLine())}. Changing the goal changes the weekly advice, not your targets, so update those too.</div>
     <div class="row wrap" style="margin-top:8px"><button class="small" data-act="newblock">Start new 8-week block today</button><span class="muted">${bw?'Currently week '+bw+' of 8':'No block started'}</span></div>
     <ul class="plain muted" style="margin-top:8px">${goalNotes()}</ul></div>`;
   h+=newPlanCard()+viewProgramEditor();
@@ -1320,6 +1400,7 @@ app.addEventListener('change',e=>{
   if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;render()}}
   else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;render()}
   else if(el.id==='liftsel'){S.lift=el.value;render()}
+  else if(el.id==='goalsel'){const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:el.value});s.phaseStart=today();putSettings(s);render()}
   else if(ds.set){const s=clone(cfg());s[ds.set]=ds.set==='block'?(el.value||null):num(el.value);putSettings(s);render()}
   else if(ds.pre!=null&&ds.pf==='g')render();
 });
@@ -1402,7 +1483,10 @@ app.addEventListener('click',e=>{
   else if(act==='cp'){Promise.resolve().then(()=>navigator.clipboard.writeText(ds.cp)).then(()=>toast('Copied'),()=>toast('Press and hold the text to copy it'))}
   else if(act==='boardwk'){S.boardWeek=ds.v;render()}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
-  else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);putSettings(s);render()}
+  else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);s.calAdj=weekStart(today());putSettings(s);render()}
+  else if(act==='checkok'){const s=clone(cfg());s.checkin=weekStart(today());putSettings(s);render()}
+  else if(act==='checkshow'||act==='checkhide'){S.showCheckin=act==='checkshow';render()}
+  else if(act==='phase'){const p=nextPhases()[i];if(!p||!goalReached())return;const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:p.goal});s.cal=p.cal;s.pro=p.pro;s.goal=p.gw;s.phaseStart=today();putSettings(s);toast(p.label+': targets updated');render()}
   else if(act==='newblock'){const s=clone(cfg());s.block=today();putSettings(s);render()}
   else if(act==='preadd'){const s=clone(cfg());const ps=clone(presets());ps.push({g:'Snacks',n:'New food',c:100,p:10});s.presets=ps;putSettings(s);render()}
   else if(act==='predel'){const s=clone(cfg());const ps=clone(presets());ps.splice(i,1);s.presets=ps;putSettings(s);render()}
