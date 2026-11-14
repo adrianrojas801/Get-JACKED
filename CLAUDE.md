@@ -29,7 +29,11 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 
 | Path | What it is |
 |---|---|
-| `index.html` | The whole app: CSS, markup and vanilla JS in one file |
+| `index.html` | The page shell: header, tab bar, and the `<script>` tags that load the app in order |
+| `css/app.css` | All styles |
+| `js/*.js` | The app, split by area and loaded in this order: `program`, `core`, `training`, `shared`, `today`, `workout`, `progress`, `plan`, `events`, `app`. Each file says what it holds at the top. |
+| `supabase/functions/` | Edge Functions: `food-estimate` (photo food estimates) and `send-reminders` (push reminders). Deployed only when the repo variable `DEPLOY_FUNCTIONS` is `true`. |
+| `docs/EVIDENCE.md` | The research or practice behind every coaching rule |
 | `sw.js` | Service worker that keeps the app's own files on the phone so it opens offline |
 | `config.js` | Supabase project URL and **publishable** key (public by design) |
 | `vendor/supabase.js` | supabase-js 2.119.0 browser build, kept in the repo (no CDN at runtime) |
@@ -43,8 +47,8 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 
 ## Architecture you must preserve
 
-- **Single-file app, no framework, no build step.** Don't add a bundler, framework or npm dependencies unless the owner asks. External network calls go only to Supabase.
-- **Data adapter:** `makeDb(uid)` in `index.html` makes Supabase look like the document store the UI was written for: `doc(path).get/set/update/onSnapshot` and `collection(name).onSnapshot`. Paths are `days/<YYYY-MM-DD>`, `workouts/<date>_<prog>` and `settings/main`. Keep the UI talking to this interface, not to Supabase directly.
+- **No framework, no build step.** The app is plain scripts in `js/`, loaded in order by `index.html`, sharing one global scope. Put new code in the file for its area, or add a file (then add it to `index.html` and to `SHELL` in `sw.js`; `check_syntax.js` fails if they disagree). Code that runs at load time can only use what earlier files define. Don't add a bundler, framework or npm dependencies unless the owner asks. External network calls go only to Supabase.
+- **Data adapter:** `makeDb(uid)` in `js/app.js` makes Supabase look like the document store the UI was written for: `doc(path).get/set/update/onSnapshot` and `collection(name).onSnapshot`. Paths are `days/<YYYY-MM-DD>`, `workouts/<date>_<prog>` and `settings/main`. Keep the UI talking to this interface, not to Supabase directly.
 - **Per-person programs:** each person's program lives in `settings/main` as `program = {days:{key:{t, ex:[{n,s,r,rest,ss?,note?}]}}, order, sched}` (`sched` is Sun–Sat, a day key or `'rest'`). Read it through `PROG()`, `dayOf()`, `titleOf()` and `schedOn()`, never a hard-coded program. New people get one from the intake form (`calcTargets` + `buildProgram`). `LEGACY_PROGRAM` is the owner's original program and is only used once by `ensureProgram()` to move him over (`settings.legacy = true` keeps his personal notes, food groups and cheat sheet). Never show legacy-only content to anyone else.
 - **Custom programs:** the intake also sends open-ended answers to `intake_requests`. The admin's Account page lists them, **Copy for Claude** builds a prompt (`reqPrompt`) with the answers, the training rules and the JSON format (`PLAN_FORMAT`), and **Send program** checks the pasted JSON with `normPlan()` before sending. The person gets a "new program is ready" card and chooses **Use it**. Keep `reqPrompt`'s rules in line with the product rules below.
 - **Shared helpers, use them instead of re-deriving:** lift math goes through `bestSet()`, `liftHistory()`, `bestOf()`, `stallOf()`, `isBest()` and `volumeOf()`; week totals through `weekStats()`, `streaks()` and `plannedPerWeek()`; every way of logging food through `addFood()`. Bodyweight lifts (no weight entered) are tracked by reps.
@@ -58,6 +62,10 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Screens:** Today is a dashboard (rings, workout card, six `topFoods()` buttons, the log, a short body card). The full food list and its editor live in `foodSheet()`, shown when `S.sheet === 'foods'`; sheets render inside `#app` so the one click handler still works. Every food button reads its list from `FOOD_SRC`. Workout shows one open exercise (`exCard()`, `S.exOpen`, `nextOpen()`); the set you're on uses `setDefault()` for what an empty field means. Progress is three sections (`S.psec`: body, lifts, friends). Plan holds targets and the program; rules and food tips sit in a folded "How this works".
 - **Undo:** anything removed with one tap (a logged food, a quick-add food, an exercise) calls `toast(msg, undoFn)` through `undoDay` / `undoSettings` / `undoWorkout`. Do the same for new one-tap removals.
 - **Muscle figure:** `bodySVG(lv, cls, opts)` draws half a body and mirrors it. Muscle keys are in `MUS_NAME`; `MUS_RULES` maps exercise names to main and helping muscles (first match wins, so specific patterns go first). A new muscle needs a key, a path in `bodySVG`, and at least one rule.
+- **Suggestions:** `suggestions()` proposes program changes (more sets or a new lift for a focus muscle whose *planned* sets are under 10; a swap for a lift stalled 4+ weeks). They only change the program when the person taps **Do it**, always with Undo. New lifts come from `MOVES`, which must only hold exercises the gym has and that `musFor()` maps to that muscle (the smoke test checks this).
+- **Measurements and photos:** tape measurements are fields on the day doc (`MEAS`). Progress photos are files in the private `progress` storage bucket under `<user id>/<date>_<pose>_<time>.jpg`, shrunk in the browser by `shrinkImage()`.
+- **Head to head:** `weekScore()` scores one week's board rows with the categories in `H2H`. It reads the board; it must not need anything the board doesn't already share.
+- **Optional server features:** photo estimates (`probeEstimates()` → `edgeSampler()` → the `food-estimate` function) and reminders (`remindersCard()`, `push_subs`, the `send-reminders` function, the `push` handler in `sw.js`). Both stay hidden until configured: estimates until the function answers `{ready:true}`, reminders until `config.js` has `vapidPublicKey`. Keep them hidden-by-default; never show a button that can't work.
 - **Writes:** `set` means a full upsert. `update` means the `patch_doc` RPC (a top-level `jsonb ||` merge). Field-level edits must use the patch path so two devices don't overwrite each other.
 - **Save pipeline:** `save()` / `flush()` / `pending{}` writes taps instantly, debounces typing by about 700 ms, writes one document at a time, retries once on `unavailable`, flushes on `pagehide`/`visibilitychange`, and shows "Not saved yet…" after 5 seconds. Snapshots for docs with pending writes are skipped. Don't regress any of this.
 - **Loading:** show "Loading your data…" until days, workouts and settings have all arrived. Never render an empty Today screen that looks like lost data.
@@ -72,7 +80,10 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **The one anon exception is `log_steps()`.** An iOS Shortcut can't sign in, so this function is granted to `anon` and checks a personal token itself (only the hash is stored, in `step_tokens`). It can only set `steps` on one of the owner's day logs from the last week. `tests/check_sql.py` allows anon only for functions in `ANON_OK`; don't add to that list without a token check inside the function and tests in `check_db.py`.
 - `profiles.is_admin` can only be set from SQL. Never let the client write it (`display_name` has its own column-level grant).
 - `security definer` functions must pin `search_path` and revoke execute from `public` and `anon`.
-- **Secrets:** only the publishable key goes in the repo. The secret / `service_role` key, the database password and any API keys (Anthropic, etc.) never go in the repo or client code. Server-side secrets live in Supabase Edge Function secrets or Vercel environment variables.
+- Progress photos are private per person through `storage.objects` policies keyed on the folder name. Admins can't open them. Don't add a policy that widens that.
+- `use_ai()` is the daily allowance for AI calls. The Edge Function passes the limit; a person calling it directly can only use up their own.
+- `send-reminders` runs with the service role and may read only what it needs to decide whether to nudge (today's weight, the schedule, whether a workout is logged). It must never return a person's data to its caller.
+- **Secrets:** only the publishable key and the *public* push key (`vapidPublicKey`) go in the repo. The secret / `service_role` key, the database password and any API keys (Anthropic, etc.) never go in the repo or client code. Server-side secrets live in Supabase Edge Function secrets or Vercel environment variables.
 - Public sign-ups are disabled. Accounts are created in Supabase → Authentication → Users → Add user, with Auto Confirm on. Supabase's built-in email only reaches project team members, so don't build features that depend on emailing other people without setting up custom SMTP.
 
 ## Testing and CI
@@ -80,7 +91,8 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 CI (`.github/workflows/ci.yml`) runs these on every PR. Run them locally before pushing:
 
 ```bash
-node tests/check_syntax.js     # inline <script>, config.js and sw.js syntax
+node tests/check_syntax.js     # every js/ file, config.js and sw.js; index.html, js/ and sw.js must agree on the file list
+deno check supabase/functions/*/index.ts   # type-checks the Edge Functions (npx deno works too)
 python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, definer functions locked down, naming
 python3 tests/check_db.py      # runs migrations twice on a local Postgres and checks who can read/write what
 python3 tests/smoke.py         # headless sign-in, intake, editor, save, reload (mocked Supabase)
@@ -126,7 +138,7 @@ Plain, direct, short sentences. No hype or filler. Spell out what the user shoul
 
 ## Planned work (for context)
 
-1. Photo food estimates through a Supabase Edge Function that holds the Anthropic key (per-user daily limit, a monthly spending limit set in the Console)
+1. ~~Photo food estimates through a Supabase Edge Function that holds the Anthropic key~~ (built; off until the owner adds the key, see README)
 2. ~~Per-user workout programs stored in `settings`, plus an intake form for new users~~ (done)
 3. ~~A leaderboard from a shared summary table (steps, protein days, workouts, strength percentage gains)~~ (done: the board)
 4. ~~Steps sent automatically from an iOS Shortcut to a dedicated endpoint~~ (done: `log_steps`)
