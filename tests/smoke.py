@@ -95,7 +95,7 @@ async def main():
         check(await page.is_visible("#nav") and "Your plan is ready" in await page.inner_text("#app"),
               "Tabs come back after the intake")
 
-        await page.click("button[data-act=preset]")
+        await page.click("button[data-act=quick]")
         await page.fill("input[data-day=weight]", "170.2"); await page.wait_for_timeout(1500)
         docs = await page.evaluate("JSON.stringify(window.__docs)")
         check("170.2" in docs and '"food":[{' in docs, "Quick-add food and weight save")
@@ -181,7 +181,10 @@ async def main():
         check(prog["days"]["push"]["ex"][4]["n"] == "Cable lateral raise" and "swaps" not in s,
               "Saved 'Always' swaps carry over into the program")
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)
-        check("pozole" in (await page.inner_text("#app")).lower(), "Pablo keeps his own food cheat sheet")
+        check("pozole" not in (await page.inner_text("#app")).lower(), "Plan keeps the rules and food tips folded away")
+        await page.click("details.how summary"); await page.wait_for_timeout(150)
+        check("pozole" in (await page.inner_text("#app")).lower() and "double progression" in (await page.inner_text("#app")).lower(),
+              "How this works opens the rules and Pablo's own food cheat sheet")
         await page.evaluate("window.__failInsert = true")
         await page.click("button[data-act=redo]"); await page.wait_for_timeout(200)
         await page.select_option("#in_sex", "m"); await page.fill("#in_age", "23"); await page.fill("#in_ft", "5")
@@ -225,13 +228,34 @@ async def main():
         await page.click("button[data-act=checkok]"); await page.wait_for_timeout(300)
         check("week check-in" not in (await page.inner_text("#app")).lower() and (await settings(page)).get("checkin") == sunday,
               "Got it puts the check-in away until next week")
-        check("recent" in app and "same as yesterday" in app and "idea:" in app,
-              "Today offers recent foods, yesterday's log and a protein idea")
-        await page.click("button[data-act=recent]"); await page.wait_for_timeout(300)
+        check("same as yesterday" in app and "idea:" in app and "burrito" in (await page.inner_text(".chips")).lower()
+              and await page.locator(".chips button").count() == 6 and not await page.is_visible("input[data-day=sleep]"),
+              "Today fits the essentials: six most-used foods, yesterday's log, a protein idea, and only the body fields you use")
+        await page.click("button[data-act=bodymore]"); await page.wait_for_timeout(150)
+        check(await page.is_visible("input[data-day=sleep]") and await page.is_visible("input[data-day=waist]"), "Sleep, cardio and waist open on request")
+        await page.click("button[data-act=quick]"); await page.wait_for_timeout(300)
         food = await page.evaluate(f"(window.__docs['days/{ago(0)}']||{{}}).food||[]")
         check(len(food) == 1 and food[0]["n"] == "Burrito" and "700" in await page.inner_text("#hero"),
               "Tapping a recent food logs it and updates the rings")
         check("sam finished push today" in (await page.inner_text("#app")).lower(), "Today shows that your friend trained")
+
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
+        sheet = (await page.inner_text(".sheet")).lower()
+        check("all foods" in sheet and "recent" in sheet and "greek yogurt" in sheet, "All foods opens the full list as a sheet")
+        await page.fill("#fsearch", "greek"); await page.wait_for_timeout(150)
+        check(await page.locator(".sheet .chips button:visible").count() == 1, "Search narrows the list")
+        await page.fill("#cn", "Test bar"); await page.fill("#cc", "200"); await page.fill("#cp", "20")
+        await page.click("button[data-act=custom]"); await page.wait_for_timeout(200)
+        await page.click("button[data-act=qedit]"); await page.wait_for_timeout(200)
+        await page.fill("input[data-pre='0'][data-pf=c]", "222"); await page.wait_for_timeout(1000)
+        check((await settings(page))["presets"][0]["c"] == 222, "Edit in the sheet changes a quick-add food's numbers")
+        await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
+        check(await page.locator(".sheet").count() == 0 and "test bar" in (await page.inner_text("#flog")).lower(), "Done closes the sheet and the food is logged")
+        await page.click("#flog li:has-text('Test bar') button[data-v='-1']"); await page.wait_for_timeout(200)
+        check("test bar" not in (await page.inner_text("#flog")).lower() and "Removed Test bar" in await page.inner_text("#toast"),
+              "Removing a food offers Undo")
+        await page.click("#undo"); await page.wait_for_timeout(300)
+        check("test bar" in (await page.inner_text("#flog")).lower(), "Undo puts it back")
 
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")

@@ -113,6 +113,15 @@ label.btn{display:inline-block;border:1px solid var(--line);background:var(--chi
 @keyframes rowin{0%{background:var(--accent-soft)}100%{background:transparent}}
 #toast{position:fixed;left:50%;transform:translate(-50%,8px);bottom:calc(72px + max(24px,env(safe-area-inset-bottom)));background:var(--good);color:var(--card);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;transition:opacity .2s,transform .25s var(--ease);pointer-events:none;z-index:7;max-width:90%;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.18)}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#toast.act{pointer-events:auto;z-index:9}
+#undo{margin-left:12px;padding:3px 10px;border-radius:999px;background:var(--card);color:var(--good);border:none;font-weight:700;font-size:13px}
+.sheet{position:fixed;left:0;right:0;bottom:0;top:max(44px,env(safe-area-inset-top));z-index:8;background:var(--bg);border-radius:20px 20px 0 0;border-top:1px solid var(--line);box-shadow:0 -10px 40px rgba(0,0,0,.35);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 16px calc(28px + env(safe-area-inset-bottom));animation:sheetup .28s var(--ease) both}
+@keyframes sheetup{from{transform:translateY(40px);opacity:.001}to{transform:none;opacity:1}}
+.sheet>*{max-width:612px;margin-left:auto;margin-right:auto}
+.sheethead{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 0 10px;background:var(--bg)}
+.sheethead h2{font-family:var(--display);font-size:24px;font-weight:800;text-transform:uppercase;letter-spacing:.025em;margin:0;line-height:1}
+.sheet h3{font-size:11.5px;margin:18px 0 8px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.1em}
+body.sheeton{overflow:hidden}body.sheeton #timer{display:none}
 .list{list-style:none;margin:0;padding:0}
 .list li{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
 .list li:first-child{border-top:none}
@@ -229,6 +238,9 @@ ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inl
 button.star{font-size:17px;padding:0 6px 0 0;color:var(--muted);line-height:1}button.star.on{color:var(--accent)}
 .buddy{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13.5px;color:var(--accent);font-weight:600}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+details.how summary{display:flex;flex-direction:column;gap:2px;cursor:pointer;list-style:none}
+details.how summary::-webkit-details-marker{display:none}
+details.how summary h2{margin:0}details.how summary h2::after{content:' +';color:var(--muted)}details.how[open] summary h2::after{content:' −'}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
 details.pday summary::-webkit-details-marker{display:none}
@@ -713,7 +725,13 @@ function boardCard(){
 }
 
 // ---------- toast ----------
-function toast(msg){const el=$('#toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2600)}
+// A short message at the bottom. Pass `undo` (a function) to add an Undo button for a few seconds.
+function toast(msg,undo){const el=$('#toast');if(!el)return;toast.undo=undo||null;el.innerHTML=esc(msg)+(undo?'<button type="button" id="undo">Undo</button>':'');el.classList.toggle('act',!!undo);el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>{el.classList.remove('show','act');toast.undo=null},undo?6000:2600)}
+$('#toast').addEventListener('click',e=>{if(e.target.id!=='undo'||!toast.undo)return;const f=toast.undo;toast.undo=null;$('#toast').classList.remove('show','act');f();render()});
+// "Removed X · Undo" helpers: each puts back the copy taken before the change.
+const undoDay=(k,before,what)=>toast(`Removed ${what}`,()=>putDay(k,before));
+const undoSettings=(before,what)=>toast(`Removed ${what}`,()=>putSettings(before));
+const undoWorkout=(before,what)=>toast(`Removed ${what}`,()=>putWorkout(before));
 
 // ---------- charts ----------
 function chart(series,{h=150,goal=null,xl=null,yf=v=>Math.round(v)}={}){
@@ -742,7 +760,8 @@ function bar(v,t){const pct=Math.min(100,Math.round(v/t*100));return `<div class
 // ---------- food log ----------
 const sameFood=(f,p)=>f.n===p.n&&f.c===(+p.c||0)&&f.p===(+p.p||0);
 // Adds q of a food to a day (bumps the count if it's already there). Every way of logging food goes through here.
-function addFood(d,p,q=1){const n=String(p.n).trim(),x={n,c:+p.c||0,p:+p.p||0};const ex=d.food.find(f=>sameFood(f,x));if(ex)ex.q=(ex.q||1)+q;else d.food.push(Object.assign(x,{q}));return d}
+// A new entry also notes the hour (h) when it's logged on the day itself, so topFoods() can learn what you eat when.
+function addFood(d,p,q=1){const n=String(p.n).trim(),x={n,c:+p.c||0,p:+p.p||0};const ex=d.food.find(f=>sameFood(f,x));if(ex)ex.q=(ex.q||1)+q;else{const h=p.h!=null?p.h:(d.date===today()?new Date().getHours():null);d.food.push(Object.assign(x,{q},h!=null?{h}:{}))}return d}
 // Foods logged in the last 3 weeks that aren't quick-add buttons yet, newest first.
 function recentFoods(k){
   const ps=presets(),out=[];
@@ -758,27 +777,44 @@ function proteinIdea(d,t){
   return `<div class="muted" style="margin-top:4px">Idea: ${esc(pick.n)} gets you ${fmt(Math.min(pick.p,gap))} g closer for ${fmt(pick.c)} cal.</div>`;
 }
 function pq(d,p){return ((d.food||[]).find(f=>sameFood(f,p))||{}).q||0}
-function foodSum(d,t){const tot=foodTotals(d);return `<div id="fsum"><div class="row between"><span>Calories</span><span><b data-n="${tot.c}">${fmt(tot.c)}</b> / ${fmt(t.cal)}</span></div>${bar(tot.c,t.cal)}
-   <div class="row between"><span>Protein</span><span><b data-n="${tot.p}">${fmt(tot.p)}</b> / ${t.pro} g</span></div>${bar(tot.p,t.pro)}
-   <div class="muted">${tot.p>=t.pro?'<span class="good">Protein hit ✓</span>':`${fmt(t.pro-tot.p)} g protein to go`} · ${tot.c>=t.cal?'calories hit':fmt(t.cal-tot.c)+' cal left'}</div>${S.dk===today()?proteinIdea(d,t):''}</div>`}
+function foodSum(d,t){const tot=foodTotals(d);return `<div class="fsum"><div class="muted">${tot.p>=t.pro?'<span class="good">Protein hit ✓</span>':`${fmt(t.pro-tot.p)} g protein to go`} · ${tot.c>=t.cal?'calories hit':fmt(t.cal-tot.c)+' cal left'}</div>${S.dk===today()?proteinIdea(d,t):''}</div>`}
 function foodLog(d){return `<div id="flog">${(d.food||[]).length?`<h3>Logged</h3><ul class="list">`+d.food.map((f,i)=>`<li data-fn="${esc(f.n)}"><div class="grow">${esc(f.n)}${(f.q||1)>1?` <b>×${f.q}</b>`:''}<div class="muted">${fmt(f.c*(f.q||1))} cal · ${r1(f.p*(f.q||1))} g</div></div><button class="small" data-act="fq" data-i="${i}" data-v="-1">−</button><button class="small" data-act="fq" data-i="${i}" data-v="1">+</button></li>`).join('')+`</ul>`:''}</div>`}
-function countUp(el,a,b){if(a===b)return;const t0=performance.now(),D=450;const st=now=>{const k=Math.min(1,(now-t0)/D),e=1-Math.pow(1-k,3);el.textContent=fmt(a+(b-a)*e);if(k<1)requestAnimationFrame(st)};requestAnimationFrame(st)}
-function refreshFood(d,changed,anchor){
-  const fs=$('#fsum'),fl=$('#flog');if(!fs||!fl){render();return}
-  const y0=anchor?anchor.getBoundingClientRect().top:null;
-  const oldW=[...fs.querySelectorAll('.bar>div')].map(x=>x.style.width),oldN=[...fs.querySelectorAll('b[data-n]')].map(x=>+x.dataset.n);
-  fs.outerHTML=foodSum(d,T());fl.outerHTML=foodLog(d);{const hr=$('#hero');if(hr)hr.outerHTML=hero(d,T())}
-  const nfs=$('#fsum');
-  nfs.querySelectorAll('.bar>div').forEach((x,j)=>{const w=x.style.width;x.style.transition='none';x.style.width=oldW[j]||'0%';void x.offsetWidth;x.style.transition='';x.style.width=w});
-  nfs.querySelectorAll('b[data-n]').forEach((x,j)=>{x.textContent=fmt(oldN[j]??0);countUp(x,oldN[j]??0,+x.dataset.n)});
+// The foods you log most, with the ones you usually eat around this time of day first. Quick-add foods fill any gaps.
+// Only earlier days count, so the buttons don't move while you're logging.
+function topFoods(k,n=6){
+  const hr=new Date().getHours(),score=new Map();
+  for(let i=1;i<=30;i++)for(const f of (S.days[addDays(k,-i)]||{}).food||[]){
+    const key=f.n+'|'+f.c+'|'+f.p,gap=f.h==null?99:Math.abs(f.h-hr),near=Math.min(gap,24-gap)<=3;
+    const e=score.get(key)||{f:{n:f.n,c:f.c,p:f.p},s:0};e.s+=(near?3:1)*(i<=7?2:1);score.set(key,e)}
+  const out=[...score.values()].sort((x,y)=>y.s-x.s||x.f.n.localeCompare(y.f.n)).map(e=>e.f);
+  for(const p of presets()){if(out.length>=n)break;const x={n:p.n,c:+p.c||0,p:+p.p||0};if(!out.some(o=>sameFood(o,x)))out.push(x)}
+  return out.slice(0,n);
+}
+// Where each kind of food button gets its list. The click handler and refreshFood both read from here.
+const FOOD_SRC={preset:()=>presets(),recent:()=>recentFoods(S.dk),quick:()=>topFoods(S.dk)};
+const chip=(act,i,p,d)=>{const q=pq(d,p);return `<button class="${q?'has':''}" data-act="${act}" data-i="${i}">${esc(p.n)}<br><span class="muted">${p.c} cal · ${p.p}g</span><span class="qn">×${q}</span></button>`};
+// After a food tap: update the totals, rings, log and button counts in place, without redrawing the screen.
+function refreshFood(d,changed){
+  if(!$('.fsum')||!$('#flog')){render();return}
+  app.querySelectorAll('.fsum').forEach(x=>{x.outerHTML=foodSum(d,T())});$('#flog').outerHTML=foodLog(d);
+  {const hr=$('#hero');if(hr)hr.outerHTML=hero(d,T())}
   if(changed){const li=[...$('#flog').querySelectorAll('li')].find(l=>l.dataset.fn===changed);if(li)li.classList.add('pop')}
-  const src={preset:presets(),recent:recentFoods(S.dk)};app.querySelectorAll('button[data-act="preset"],button[data-act="recent"]').forEach(c=>{const p=src[c.dataset.act][+c.dataset.i];if(!p)return;const q=pq(d,p);c.classList.toggle('has',q>0);const sp=c.querySelector('.qn');if(sp)sp.textContent='×'+q});
-  if(anchor&&y0!=null){const dy=anchor.getBoundingClientRect().top-y0;if(dy)window.scrollBy({top:dy,behavior:'instant'})}
+  app.querySelectorAll('.chips button[data-i]').forEach(c=>{const src=FOOD_SRC[c.dataset.act],p=src&&src()[+c.dataset.i];if(!p)return;const q=pq(d,p);c.classList.toggle('has',q>0);const sp=c.querySelector('.qn');if(sp)sp.textContent='×'+q});
+}
+// Weight, steps and creatine are always there. The rest only show if you've used them lately, or under More.
+const BODY_MORE=[['sleep','Sleep (hrs)','7.5','0.1',14],['cardio','Cardio (min)','20','1',14],['waist','Waist (in, every 2 wks)','at belly button','0.1',28]];
+const usedLately=(f,days)=>{for(let i=0;i<days;i++){const d=S.days[addDays(today(),-i)];if(d&&num(d[f])!=null)return true}return false};
+function bodyCard(k,d){
+  const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
+  const lastW=(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})();
+  const shown=BODY_MORE.filter(([f,,,,days])=>S.bodyMore||num(d[f])!=null||usedLately(f,days)),hidden=BODY_MORE.length-shown.length;
+  return `<div class="card"><div class="row between"><h2 style="margin:0">Body</h2><label class="check"><input type="checkbox" data-day="creatine" ${d.creatine?'checked':''}> Creatine</label></div>
+    <div class="grid2" style="margin-top:10px">${fld('weight',k===today()?'Weight this morning (lbs)':'Weight (lbs)',lastW)}${fld('steps','Steps','8000','1')}${shown.map(([f,l,ph,st])=>fld(f,l,ph,st)).join('')}</div>
+    ${hidden||S.bodyMore?`<button class="link" data-act="bodymore" style="margin-top:6px">${S.bodyMore?'Show less':'Sleep, cardio, waist'}</button>`:''}</div>`;
 }
 function viewToday(){
-  const k=S.dk,d=dayDoc(k),t=T(),tot=foodTotals(d);
+  const k=S.dk,d=dayDoc(k),t=T();
   const isToday=k===today();const prog=schedOn(k);
-  const groups={};foodGroups().forEach(g=>{groups[g]=[]});presets().forEach((p,i)=>{(groups[p.g||'Other']=groups[p.g||'Other']||[]).push([p,i])});
   let h=`<div class="row between"><button data-act="day" data-v="-1">◀</button><b>${isToday?'Today · ':''}${nice(k)}</b><div class="row"><button data-act="day" data-v="1" ${isToday?'disabled style="visibility:hidden" aria-hidden="true"':''}>▶</button></div></div>`;
   if(!isToday)h+=`<div style="text-align:center"><button class="link" data-act="gotoday">Jump to today</button></div>`;
   h+=newPlanCard();
@@ -787,24 +823,31 @@ function viewToday(){
   {const sk=streaks(),plan=plannedPerWeek(),wk=weekStats(weekStart(k));
    h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">${trainedDates().has(k)?'Open workout ✓':'Open workout'}</button>`}</div>
     ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div>${isToday?buddyLine():''}</div>`}
-  const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
-  h+=`<div class="card"><h2>Body & habits</h2><div class="grid2">
-   ${fld('weight','Weight (lbs, morning)',(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})())}${fld('sleep','Sleep (hrs)','7.5')}
-   ${fld('steps','Steps','8000','1')}${fld('cardio','Cardio (min)','20','1')}
-   ${fld('waist','Waist (in, every 2 wks)','at belly button')}
-   <label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" data-day="creatine" ${d.creatine?'checked':''}> Creatine</label></div></div>`;
-  h+=`<div class="card"><h2>Food</h2>${foodSum(d,t)}`;
-  h+=snapUI()+`<div class="row between" style="margin-top:18px"><h3>Quick add</h3><button class="small ${S.qedit?'primary':''}" data-act="qedit">${S.qedit?'Done':'Edit'}</button></div>${S.qedit?'<div class="muted">Use ↑ ↓ to reorder, ✕ to delete.</div>':''}`;
-  for(const g of Object.keys(groups)){const arr=groups[g];h+=`<div class="muted" style="margin:8px 0 4px">${esc(g)}</div>`;if(!arr.length){h+=`<div class="muted" style="font-size:12px;opacity:.7">Nothing here yet</div>`;continue}
-    if(S.qedit)h+=`<ul class="list qlist">`+arr.map(([p,i],j)=>`<li><div class="grow">${esc(p.n)}<div class="muted">${p.c} cal · ${p.p}g</div></div><button class="small" data-act="qmove" data-i="${i}" data-v="-1" ${j===0?'disabled':''} aria-label="Move up">↑</button><button class="small" data-act="qmove" data-i="${i}" data-v="1" ${j===arr.length-1?'disabled':''} aria-label="Move down">↓</button><button class="small qx" data-act="qdel" data-i="${i}" aria-label="Delete">✕</button></li>`).join('')+`</ul>`;
-    else h+=`<div class="chips">`+arr.map(([p,i])=>{const q=pq(d,p);return `<button class="${q?'has':''}" data-act="preset" data-i="${i}">${esc(p.n)}<br><span class="muted">${p.c} cal · ${p.p}g</span><span class="qn">×${q}</span></button>`}).join('')+`</div>`}
-  const rc=recentFoods(k),yd=S.days[addDays(k,-1)],yt=yd&&(yd.food||[]).length?foodTotals(yd):null;
-  if(rc.length){h+=`<div class="muted" style="margin:8px 0 4px">Recent</div>`;
-    if(S.qedit)h+=`<ul class="list qlist">`+rc.map((p,i)=>`<li><div class="grow">${esc(p.n)}<div class="muted">${p.c} cal · ${p.p}g</div></div><button class="small" data-act="rckeep" data-i="${i}">Keep as quick add</button></li>`).join('')+`</ul>`;
-    else h+=`<div class="chips">`+rc.map((p,i)=>{const q=pq(d,p);return `<button class="${q?'has':''}" data-act="recent" data-i="${i}">${esc(p.n)}<br><span class="muted">${p.c} cal · ${p.p}g</span><span class="qn">×${q}</span></button>`}).join('')+`</div>`}
-  if(yt&&!(d.food||[]).length)h+=`<button class="small" data-act="copyday" style="margin-top:12px">Log the same as yesterday (${fmt(yt.c)} cal · ${fmt(yt.p)} g)</button>`;
-  h+=`<h3>Custom</h3><div class="row"><input id="cn" placeholder="Food" class="grow"><input id="cc" type="number" inputmode="numeric" placeholder="cal" style="width:70px"><input id="cp" type="number" inputmode="decimal" placeholder="prot (g)" style="width:86px"><button data-act="custom">Add</button></div>
-   <div class="muted" style="margin-top:6px">Preset numbers are estimates. Edit them in the Plan tab.</div>${foodLog(d)}</div>`;
+  const yd=S.days[addDays(k,-1)],yt=yd&&(yd.food||[]).length?foodTotals(yd):null;
+  h+=`<div class="card"><div class="row between"><h2 style="margin:0">Food</h2><button class="small primary" data-act="foods">All foods</button></div>
+    <div style="margin-top:8px">${foodSum(d,t)}</div>
+    <div class="chips" style="margin-top:8px">${topFoods(k).map((p,i)=>chip('quick',i,p,d)).join('')}</div>
+    ${yt&&!(d.food||[]).length?`<button class="small" data-act="copyday" style="margin-top:12px">Log the same as yesterday (${fmt(yt.c)} cal · ${fmt(yt.p)} g)</button>`:''}${foodLog(d)}</div>`;
+  h+=bodyCard(k,d);
+  return h;
+}
+// The full food list, opened from Today: search, every quick-add group, recent foods, a custom entry, and Edit.
+function foodSheet(){
+  const k=S.dk,d=dayDoc(k),ps=presets(),groups={};
+  foodGroups().forEach(g=>{groups[g]=[]});ps.forEach((p,i)=>{(groups[p.g||'Other']=groups[p.g||'Other']||[]).push([p,i])});
+  const allGroups=Object.keys(groups),rc=recentFoods(k);
+  let h=`<div class="sheet" role="dialog" aria-label="All foods"><div class="sheethead"><h2>${S.qedit?'Edit foods':'All foods'}</h2><div class="row"><button class="small" data-act="qedit">${S.qedit?'Back to list':'Edit'}</button><button class="small primary" data-act="sheetx">Done</button></div></div>`;
+  if(S.qedit){
+    h+=`<div class="muted">Change the numbers so they match what you actually eat. Changes save automatically.</div>`;
+    for(const g of allGroups){const arr=groups[g];if(!arr.length)continue;h+=`<h3>${esc(g)}</h3><ul class="list qlist">`+arr.map(([p,i],j)=>`<li style="flex-wrap:wrap"><input data-pre="${i}" data-pf="n" value="${esc(p.n)}" style="flex:1 1 100%" aria-label="Name"><input data-pre="${i}" data-pf="c" type="number" inputmode="numeric" value="${p.c}" style="width:76px" aria-label="Calories"><span class="muted">cal</span><input data-pre="${i}" data-pf="p" type="number" inputmode="decimal" value="${p.p}" style="width:64px" aria-label="Protein"><span class="muted">g</span><select data-pre="${i}" data-pf="g" class="grow" aria-label="Group">${allGroups.map(x=>`<option ${x===(p.g||'Other')?'selected':''}>${esc(x)}</option>`).join('')}</select><button class="small" data-act="qmove" data-i="${i}" data-v="-1" ${j===0?'disabled':''} aria-label="Move up">↑</button><button class="small" data-act="qmove" data-i="${i}" data-v="1" ${j===arr.length-1?'disabled':''} aria-label="Move down">↓</button><button class="small qx" data-act="qdel" data-i="${i}" aria-label="Delete">✕</button></li>`).join('')+`</ul>`}
+    if(rc.length)h+=`<h3>Recent</h3><ul class="list qlist">`+rc.map((p,i)=>`<li><div class="grow">${esc(p.n)}<div class="muted">${p.c} cal · ${p.p}g</div></div><button class="small" data-act="rckeep" data-i="${i}">Keep as quick add</button></li>`).join('')+`</ul>`;
+    return h+`<div class="row wrap" style="margin-top:12px"><button class="small" data-act="preadd">+ Add food</button>${Array.isArray(cfg().presets)?`<button class="small" data-act="prereset">Reset to defaults</button>`:''}</div></div>`;
+  }
+  h+=`<div class="fsumrow">${foodSum(d,T())}</div><input id="fsearch" type="search" placeholder="Search foods" autocomplete="off" style="margin:10px 0 2px">`+snapUI();
+  for(const g of allGroups){const arr=groups[g];if(!arr.length)continue;h+=`<div class="fgroup"><h3>${esc(g)}</h3><div class="chips">${arr.map(([p,i])=>chip('preset',i,p,d)).join('')}</div></div>`}
+  if(rc.length)h+=`<div class="fgroup"><h3>Recent</h3><div class="chips">${rc.map((p,i)=>chip('recent',i,p,d)).join('')}</div></div>`;
+  h+=`<h3>Something else</h3><div class="row"><input id="cn" placeholder="Food" class="grow"><input id="cc" type="number" inputmode="numeric" placeholder="cal" style="width:70px"><input id="cp" type="number" inputmode="decimal" placeholder="prot (g)" style="width:86px"><button data-act="custom">Add</button></div>
+    <div class="muted" style="margin-top:8px">The numbers are estimates. Tap Edit to change them.</div></div>`;
   return h;
 }
 
@@ -1402,25 +1445,22 @@ function viewPlan(){
     <div class="row wrap" style="margin-top:8px"><button class="small" data-act="newblock">Start new 8-week block today</button><span class="muted">${bw?'Currently week '+bw+' of 8':'No block started'}</span></div>
     <ul class="plain muted" style="margin-top:8px">${goalNotes()}</ul></div>`;
   h+=newPlanCard()+viewProgramEditor();
-  h+=`<div class="card"><h2>Rules</h2><ul class="plain">
+  // The training rules and food tips are reference material, so they stay folded away until asked for.
+  h+=`<details class="card how" ${S.howOpen?'open':''}><summary><h2>How this works</h2><span class="muted">Training rules and food tips</span></summary>
+    <h3>Training</h3><ul class="plain">
     <li>Keep the same main lifts for 6–8 weeks. Only swap isolation moves.</li>
-    <li><b>Double progression:</b> once you hit the top of the rep range on every set, add weight (+5 lbs, or the next dumbbell up).</li>
+    <li><b>Double progression:</b> once you hit the top of the rep range on every set, add weight and start again at the bottom of the range.</li>
     <li>Take most sets to 0–2 reps short of failure. Isolation moves can go all the way to failure, and a drop set on the last set is fine. Keep heavy Smith lifts at 1–2 reps left.</li>
     <li>Rest 2–3 min on compounds and at least 90 sec on isolation. Supersets let you rest less without losing quality.</li>
     <li>No scheduled deloads. Take an easier week only if your lifts stall for 2+ weeks or your joints and energy feel beat up.</li>
-    <li>Take creatine 3–5 g daily, sleep 7.5–8 h, get 8–10k steps or 2–3 incline walks a week.</li></ul></div>`;
-  if(isLegacy()){
-  h+=`<div class="card"><h2>Food cheat sheet</h2><ul class="plain">
+    <li>Take creatine 3–5 g daily, sleep 7.5–8 h, get 8–10k steps or 2–3 incline walks a week.</li></ul>
+    <h3>Food</h3><ul class="plain">${isLegacy()?`
     <li>Get protein at every meal: eggs or yogurt for breakfast, double protein at work, a real meat portion at dinner.</li>
     <li>Add a whey shake whenever you’re behind on protein.</li>
     <li>Six corn tortillas is about 350 cal. Six flour tortillas is about 850. Corn helps you stay lean.</li>
     <li>Jamba is mostly sugar unless you add the protein boost.</li>
-    <li>Pozole, ceviche, chicken and beef are great. Rice and beans are your bulking carbs.</li></ul></div>`;}
-  else h+=`<div class="card"><h2>Food cheat sheet</h2><ul class="plain">${genericFood()}</ul></div>`;
-  // presets editor
-  const ps=presets();
-  h+=`<div class="card"><h2>Quick-add foods</h2><div class="muted">Change the numbers so they match what you actually eat. The changes save automatically.</div><ul class="list" style="margin-top:6px">`+ps.map((p,i)=>`<li style="flex-wrap:wrap"><input data-pre="${i}" data-pf="n" value="${esc(p.n)}" style="flex:1 1 100%"><input data-pre="${i}" data-pf="c" type="number" inputmode="numeric" value="${p.c}" style="width:80px"><span class="muted">cal</span><input data-pre="${i}" data-pf="p" type="number" inputmode="decimal" value="${p.p}" style="width:70px"><span class="muted">g</span><select data-pre="${i}" data-pf="g" class="grow">${[...new Set([...ps.map(x=>x.g||'Other'),...foodGroups()])].map(g=>`<option ${g===(p.g||'Other')?'selected':''}>${esc(g)}</option>`).join('')}</select><button class="small" data-act="predel" data-i="${i}">✕</button></li>`).join('')+`</ul>
-    <div class="row wrap" style="margin-top:8px"><button class="small" data-act="preadd">+ Add food</button>${Array.isArray(c.presets)?`<button class="small" data-act="prereset">Reset to defaults</button>`:''}</div></div>`;
+    <li>Pozole, ceviche, chicken and beef are great. Rice and beans are your bulking carbs.</li>`:genericFood()}</ul>
+    <p class="muted" style="margin-bottom:0">To change your quick-add foods, tap <b>All foods</b> on Today, then <b>Edit</b>.</p></details>`;
   return h;
 }
 
@@ -1435,7 +1475,12 @@ function render(){
   document.body.classList.remove('setup');
   if(S.flash)h+=`<div class="banner">${esc(S.flash)}</div>`;
   h+=({today:viewToday,workout:viewWorkout,progress:viewProgress,plan:viewPlan,account:viewAccount}[S.tab]||viewToday)();
+  if(S.tab!=='today')S.sheet=null;
+  const keep=S.sheet&&$('.sheet')?$('.sheet').scrollTop:0;
+  if(S.sheet==='foods')h+=foodSheet();
+  document.body.classList.toggle('sheeton',!!S.sheet);
   $('#app').innerHTML=h;
+  if(keep){const sh=$('.sheet');if(sh){sh.style.animation='none';sh.scrollTop=keep}}
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
 function meBadge(){const b=$('#me');if(!b)return;const n=((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email)||'').trim();b.textContent=n?n[0]:'?';b.classList.toggle('on',S.tab==='account')}
@@ -1450,6 +1495,7 @@ const app=$('#app');
 app.addEventListener('input',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='snaptxt'){S.snapTxt=el.value;return}
+  if(el.id==='fsearch'){const q=el.value.trim().toLowerCase();app.querySelectorAll('.sheet .fgroup').forEach(g=>{let any=false;g.querySelectorAll('.chips button').forEach(b=>{const on=!q||b.textContent.toLowerCase().includes(q);b.hidden=!on;any=any||on});g.hidden=!any});return}
   if(el.id&&el.id.startsWith('in_')){S.draft=Object.assign({},S.draft,{[el.id]:el.value});return}
   if(el.id==='reqplan'){S.reqDraft=el.value;return}
   if(ds.sched!=null){const s=clone(cfg());if(!s.program)return;s.program.sched[+ds.sched]=el.value;putSettings(s);render();return}
@@ -1484,6 +1530,9 @@ app.addEventListener('click',e=>{
   else if(act==='gotoday'){S.dk=today();render()}
   else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.tab='workout';render();window.scrollTo(0,0)}
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
+  else if(act==='foods'){S.sheet='foods';S.qedit=false;render()}
+  else if(act==='sheetx'){S.sheet=null;S.qedit=false;render()}
+  else if(act==='bodymore'){S.bodyMore=!S.bodyMore;render()}
   else if(act==='intake')submitIntake();
   else if(act==='meback')toggleAccount();
   else if(act==='reqload'){S.reqs=null;S.reqErr=null;render()}
@@ -1498,20 +1547,20 @@ app.addEventListener('click',e=>{
   else if(act==='redox'){S.redo=false;S.draft=null;render()}
   else if(act==='pexmv'||act==='pexdel'||act==='pexadd'){const s=clone(cfg());const d=s.program&&s.program.days[ds.k];if(!d)return;S.openDay=ds.k;
     if(act==='pexmv'){const j=i+(+ds.v);if(j<0||j>=d.ex.length)return;[d.ex[i],d.ex[j]]=[d.ex[j],d.ex[i]]}
-    else if(act==='pexdel')d.ex.splice(i,1);
+    else if(act==='pexdel'){const before=clone(cfg()),gone=d.ex.splice(i,1)[0];putSettings(s);render();if(gone)undoSettings(before,gone.n);return}
     else d.ex.push({n:'New exercise',s:3,r:'8-12',rest:90});
     putSettings(s);render()}
   else if(act==='pdayadd'){const s=clone(cfg());if(!s.program)return;let n=1,k;do{k='day'+n++}while(s.program.days[k]);s.program.days[k]={t:'New day',ex:[]};s.program.order.push(k);S.openDay=k;putSettings(s);render()}
   else if(act==='pdaydel'){if(S.delDay!==ds.k){S.delDay=ds.k;S.openDay=ds.k;render();return}
     const s=clone(cfg());if(!s.program)return;delete s.program.days[ds.k];s.program.order=s.program.order.filter(x=>x!==ds.k);s.program.sched=s.program.sched.map(x=>x===ds.k?'rest':x);S.delDay=null;putSettings(s);render()}
   else if(act==='qmove'){const ps=clone(presets());const p=ps[i];if(!p)return;const g=p.g||'Other';const dir=+ds.v;let j=i+dir;while(j>=0&&j<ps.length&&(ps[j].g||'Other')!==g)j+=dir;if(j<0||j>=ps.length)return;[ps[i],ps[j]]=[ps[j],ps[i]];const s=clone(cfg());s.presets=ps;putSettings(s);render()}
-  else if(act==='qdel'){const p=presets()[i];if(!p)return;const s=clone(cfg());const ps=clone(presets());ps.splice(i,1);s.presets=ps;putSettings(s);render()}
-  else if(act==='preset'||act==='recent'){const p=(act==='preset'?presets():recentFoods(S.dk))[i];if(!p)return;const d=addFood(dayDoc(S.dk),p);putDay(S.dk,d);refreshFood(d,p.n);
+  else if(act==='qdel'){const p=presets()[i];if(!p)return;const before=clone(cfg()),s=clone(cfg());const ps=clone(presets());ps.splice(i,1);s.presets=ps;putSettings(s);render();undoSettings(before,p.n)}
+  else if(FOOD_SRC[act]){const p=FOOD_SRC[act]()[i];if(!p)return;const d=addFood(dayDoc(S.dk),p);putDay(S.dk,d);refreshFood(d,p.n);
     const sp=b.querySelector('.qn');if(sp){sp.classList.remove('pop');void sp.offsetWidth;sp.classList.add('pop')}b.classList.remove('ring');void b.offsetWidth;b.classList.add('ring');
     try{navigator.vibrate&&navigator.vibrate(15)}catch(x){}}
   else if(act==='rckeep'){const p=recentFoods(S.dk)[i];if(!p)return;const s=clone(cfg());const ps=clone(presets());const gs=foodGroups();ps.push(Object.assign({g:gs.includes('Snacks')?'Snacks':gs[0]||'Other'},p));s.presets=ps;putSettings(s);render()}
   else if(act==='copyday'){const y=S.days[addDays(S.dk,-1)];if(!y)return;const d=dayDoc(S.dk);for(const f of y.food||[])addFood(d,f,f.q||1);putDay(S.dk,d);render()}
-  else if(act==='fq'){const d=dayDoc(S.dk);const f=d.food[i];if(!f)return;f.q=(f.q||1)+(+ds.v);const nm=f.q>0?f.n:null;if(f.q<=0)d.food.splice(i,1);putDay(S.dk,d);refreshFood(d,nm)}
+  else if(act==='fq'){const before=dayDoc(S.dk),d=dayDoc(S.dk);const f=d.food[i];if(!f)return;f.q=(f.q||1)+(+ds.v);const gone=f.q<=0;if(gone)d.food.splice(i,1);putDay(S.dk,d);refreshFood(d,gone?null:f.n);if(gone)undoDay(S.dk,before,f.n)}
   else if(act==='snap'){if(!(S.snap&&S.snap.busy))runSnap()}
   else if(act==='snapclear'){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapUrl=null;S.snapFile=null;render()}
   else if(act==='snapdel'){if(S.snap&&S.snap.items){S.snap.items.splice(i,1);render()}}
@@ -1545,7 +1594,7 @@ app.addEventListener('click',e=>{
   else if(act==='swapone'||act==='swapall'){const n=($('#swapname').value||'').trim();if(!n)return;const w=curWorkout();const ex=w.ex[i];
     if(act==='swapall'&&ex.ti!=null){const s=clone(cfg());const pe=s.program&&s.program.days[w.prog]&&s.program.days[w.prog].ex[ex.ti];if(pe){pe.n=n;delete pe.note;putSettings(s)}}
     ex.n=n;ex.note='';putWorkout(w);S.swap=null;render()}
-  else if(act==='exdel'){const w=curWorkout();w.ex.splice(i,1);putWorkout(w);S.swap=null;render()}
+  else if(act==='exdel'){const before=curWorkout(),w=curWorkout(),gone=w.ex.splice(i,1)[0];putWorkout(w);S.swap=null;S.exOpen=null;render();if(gone)undoWorkout(before,gone.n)}
   else if(act==='axclose'){S.addEx=false;render()}
   else if(act==='axopen'){S.addEx=true;render();const x=$('#axn');x&&x.focus()}
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
@@ -1564,7 +1613,6 @@ app.addEventListener('click',e=>{
   else if(act==='phase'){const p=nextPhases()[i];if(!p||!goalReached())return;const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:p.goal});s.cal=p.cal;s.pro=p.pro;s.goal=p.gw;s.phaseStart=today();putSettings(s);toast(p.label+': targets updated');render()}
   else if(act==='newblock'){const s=clone(cfg());s.block=today();putSettings(s);render()}
   else if(act==='preadd'){const s=clone(cfg());const ps=clone(presets());ps.push({g:'Snacks',n:'New food',c:100,p:10});s.presets=ps;putSettings(s);render()}
-  else if(act==='predel'){const s=clone(cfg());const ps=clone(presets());ps.splice(i,1);s.presets=ps;putSettings(s);render()}
   else if(act==='prereset'){const s=clone(cfg());delete s.presets;putSettings(s);render()}
   else if(act==='signout'){signOut()}
   else if(act==='pwchange'){changePassword()}
