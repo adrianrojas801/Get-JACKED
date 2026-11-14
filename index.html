@@ -222,6 +222,8 @@ body.signedout main,body.signedout nav,body.signedout #timer,body.signedout #sta
 #app .err{color:var(--bad);font-size:13px;min-height:1em;margin-top:8px}
 body.setup #nav{display:none}
 .intake-rest{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.card.upnext{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+.card.exdone>.row.between>.grow>b::after{content:' ✓';color:var(--good)}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
@@ -481,6 +483,9 @@ function fail(e){
   setStatus('Not saved');render();
 }
 document.addEventListener('visibilitychange',()=>flushAll());
+// Say so when the phone is offline, and send anything waiting as soon as it's back.
+window.addEventListener('offline',()=>setStatus('Offline'));
+window.addEventListener('online',()=>{if(Object.keys(pending).length){setStatus('Saving…');flushAll()}else setStatus('Saved ✓')});
 window.addEventListener('pagehide',()=>flushAll());
 setInterval(()=>{const old=Object.values(pending).some(p=>p.since&&Date.now()-p.since>5000);if(old)setStatus('Not saved yet…');},2000);
 
@@ -877,9 +882,10 @@ function viewWorkout(){
   h+=`<div style="margin:0 4px">${bar(doneSets,allSets||1)}</div>`;
   h+=sessionFig(w);
   if(w.done)h+=summary(w,id);
+  const upNext=w.done?-1:w.ex.findIndex(e=>e.sets.some(s=>!s.d));
   w.ex.forEach((e,i)=>{
-    const last=lastFor(e.n,w.date,id);
-    h+=`<div class="card"><div class="row between"><div class="grow"><b>${e.ss?`<span class="tag">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:''}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(e.rest/60)}:${pad(e.rest%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
+    const last=lastFor(e.n,w.date,id),left=e.sets.filter(s=>!s.d).length;
+    h+=`<div class="card ${i===upNext&&doneSets?'upnext':''} ${left?'':'exdone'}"><div class="row between"><div class="grow"><b>${e.ss?`<span class="tag">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:''}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(e.rest/60)}:${pad(e.rest%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
     {const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];const nt=(te&&te.n===e.n)?(te.note||''):e.note;if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`;}
     if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
     h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,e,stallOf(liftHistory(e.n,w.date,id)))}</div>`;
