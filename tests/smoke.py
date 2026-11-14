@@ -295,7 +295,13 @@ async def main():
         app = (await page.inner_text("#app")).lower()
         check("records" in app and "lifts this week" in app and "125×10" in app, "Lifts shows records and this week's lifts")
         check("sets per muscle" in app and "lats" in app, "Lifts shows weekly sets per muscle")
-        await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
+        await page.click("svg.mfig-xl path[data-mus=lats]"); await page.wait_for_timeout(200)
+        app2 = (await page.inner_text("#app")).lower()
+        check("this week: lat pulldown" in app2 and "in your plan: lat pulldown" in app2 and await page.locator("path.msel").count() == 2,
+              "Tapping a muscle on the figure shows what trained it and what in the plan targets it")
+        check(await page.evaluate("JSON.stringify([musFor('Cable woodchop').p, musFor('Hip adduction machine').p, musFor('Upright row').p, musFor('Smith squat').s])")
+              == '[["obliques"],["adductors"],["sdelt","traps"],["hams","adductors"]]', "The figure knows obliques, inner thighs and more exercises")
+        await page.click("ul.mlist button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
         check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
               "Marking a focus muscle saves it and flags it when it's under 10 sets")
 
