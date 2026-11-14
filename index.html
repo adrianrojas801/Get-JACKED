@@ -230,6 +230,9 @@ button.exrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left
 .exrow .grow{display:flex;flex-direction:column;gap:2px}
 .exrow b{font-family:var(--display);font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:.025em;line-height:1.1}
 .excount{font-weight:700;font-size:14px;color:var(--muted);white-space:nowrap}.exrow.exdone .excount{color:var(--good)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;padding:4px;background:var(--chip);border-radius:14px;margin:4px 0 12px}
+.seg button{border:none;background:none;box-shadow:none;border-radius:10px;padding:9px 0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.seg button.on{background:var(--card);color:var(--accent);box-shadow:var(--shadow)}
 .setlist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .setrow{display:grid;grid-template-columns:26px 1fr 1fr 58px;gap:6px;align-items:center}
 .setrow>span{color:var(--muted);font-size:13px;text-align:center;font-weight:600}
@@ -725,6 +728,7 @@ function teamGoal(rows,past){
 function boardCard(){
   const head=`<div class="card"><h2>The board</h2>`;
   if(!sharing())return head+`<p class="muted" style="margin:0">You’re not on the board. Turn on sharing under your account (top right) to compare weekly totals with your friends.</p></div>`;
+  const pals=buddyLine();
   boardRows();
   if(S.board==null)return head+`<div class="muted">Loading…</div></div>`;
   if(S.boardErr)return head+`<div class="muted">The board isn’t available right now.</div></div>`;
@@ -733,7 +737,7 @@ function boardCard(){
   const top=f=>Math.max(0,...rows.map(f)),cols=[['Workouts',r=>r.workouts,v=>v],['Protein days',r=>r.protein_days,v=>v],['Avg steps',r=>r.steps,v=>v?fmt(v):'–'],['Strength',r=>r.strength==null?-999:+r.strength,v=>v===-999?'–':(v>=0?'+':'')+v+'%']];
   const cell=([,f,show],r)=>{const v=f(r),lead=rows.length>1&&v>0&&v===top(f);return `<td>${lead?'<b class="good">':''}${show(v)}${lead?'</b>':''}</td>`};
   return head+`<div class="row" style="margin-bottom:8px"><button class="small ${wk===ws?'primary':''}" data-act="boardwk" data-v="this">This week</button><button class="small ${wk===ws?'':'primary'}" data-act="boardwk" data-v="last">Last week</button></div>
-    ${teamGoal(rows,wk!==ws)}${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
+    ${pals}${teamGoal(rows,wk!==ws)}${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
     <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals and the name of your latest session are shared.</div></div>`;
 }
 
@@ -1188,7 +1192,6 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
-  h+=liftsWeekCard(td)+musclesCard(td)+boardCard();
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -1198,7 +1201,8 @@ function viewProgress(){
     let msg='';if(goalOf()==='bulk'&&dWt!=null&&dWt>0.5){const ratio=dw/dWt;msg=ratio>0.12?`<span class="warn">Waist is up ${r1(dw)}" for ${r1(dWt)} lbs gained, which is faster than ideal. Pull calories back a bit.</span>`:`<span class="good">Waist +${r1(dw)}" for ${r1(dWt)} lbs gained. That’s a clean bulk.</span>`}
     h+=`<table class="simple"><tr><th>Date</th><th>Waist</th><th>Weight</th></tr>${waist.slice(-6).reverse().map(d=>`<tr><td>${short(d.date)}</td><td>${num(d.waist)}"</td><td>${num(d.weight)??'–'}</td></tr>`).join('')}</table><p>${msg}</p>`}
   h+=`</div>`;
-  // lifts
+  // lifts (a section of its own: this week, sets per muscle, the chart for one lift, and records)
+  const body=h;h=liftsWeekCard(td)+musclesCard(td);
   const names=liftNames();
   h+=`<div class="card"><h2>Lifts</h2>`;
   if(!names.length)h+=`<p class="muted">Finish some sets on the Workout tab and your lift history shows up here.</p>`;
@@ -1210,7 +1214,8 @@ function viewProgress(){
     h+=chart([{pts:sess.map((x,i)=>[i,x.v]),color:'var(--accent)'}],{xl:sess.length>1?[short(sess[0].date),short(sess[sess.length-1].date)]:null});
     h+=`<div class="muted">${bw?'The line is your most reps in a set each session.':'The line is your estimated 1-rep max from your best set each session.'}</div><table class="simple" style="margin-top:6px"><tr><th>Date</th><th>Best set</th><th>${bw?'Reps':'Est. 1RM'}</th></tr>${sess.slice(-8).reverse().map(x=>`<tr><td>${short(x.date)}</td><td>${x.top}</td><td>${Math.round(x.v)}</td></tr>`).join('')}</table>`}
   h+=`</div>`;
-  return h+recordsCard(names);
+  const sections={body:()=>body,lifts:()=>h+recordsCard(names),friends:()=>boardCard()},sec=sections[S.psec]?S.psec:'body';
+  return `<div class="seg" role="tablist">${[['body','Body'],['lifts','Lifts'],['friends','Friends']].map(([v,l])=>`<button role="tab" aria-selected="${v===sec}" class="${v===sec?'on':''}" data-act="psec" data-v="${v}">${l}</button>`).join('')}</div>`+sections[sec]();
 }
 // Which lifts set a new best in the last 7 days, and which have stalled.
 function liftsWeekCard(td){
@@ -1642,6 +1647,7 @@ app.addEventListener('click',e=>{
   else if(act==='stepdone'){S.stepTok=null;render()}
   else if(act==='cp'){Promise.resolve().then(()=>navigator.clipboard.writeText(ds.cp)).then(()=>toast('Copied'),()=>toast('Press and hold the text to copy it'))}
   else if(act==='boardwk'){S.boardWeek=ds.v;render()}
+  else if(act==='psec'){S.psec=ds.v;S.showCheckin=false;render();window.scrollTo(0,0)}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);s.calAdj=weekStart(today());putSettings(s);render()}
   else if(act==='focus'){const s=clone(cfg()),f=focusList();s.focus=f.includes(ds.k)?f.filter(k=>k!==ds.k):[...f,ds.k];putSettings(s);render()}

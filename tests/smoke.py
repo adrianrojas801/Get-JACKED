@@ -279,23 +279,10 @@ async def main():
         await page.click("button[data-act=finish]"); await page.wait_for_timeout(300)
         check("new bests: lat pulldown 125×10" in (await page.inner_text("#app")).lower(), "The finish summary lists the new best")
 
-        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(3800)
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
         app = (await page.inner_text("#app")).lower()
-        check("records" in app and "lifts this week" in app and "125×10" in app, "Progress shows records and this week's lifts")
-        mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
-        check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
-              "The board shows you next to your friend, with only weekly totals shared")
-        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at",
-                               "planned", "last_workout", "last_title"}
-              and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
-              "Nothing else is sent to the board")
-        check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
-              "The board shows the shared weekly goal")
-
-        check("sets per muscle" in app and "lats" in app, "Progress shows weekly sets per muscle")
-        await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
-        check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
-              "Marking a focus muscle saves it and flags it when it's under 10 sets")
+        check(await page.locator(".seg button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
+              "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
         await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
         s = await settings(page)
@@ -303,6 +290,27 @@ async def main():
               "Choosing a mini-cut sets the new calorie, protein and goal-weight targets")
         await page.click("button[data-act=checkshow]"); await page.wait_for_timeout(200)
         check("week check-in" in (await page.inner_text("#app")).lower(), "The check-in can be reopened from Progress")
+
+        await page.click("button[data-act=psec][data-v=lifts]"); await page.wait_for_timeout(300)
+        app = (await page.inner_text("#app")).lower()
+        check("records" in app and "lifts this week" in app and "125×10" in app, "Lifts shows records and this week's lifts")
+        check("sets per muscle" in app and "lats" in app, "Lifts shows weekly sets per muscle")
+        await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
+        check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
+              "Marking a focus muscle saves it and flags it when it's under 10 sets")
+
+        await page.wait_for_timeout(3300)
+        await page.click("button[data-act=psec][data-v=friends]"); await page.wait_for_timeout(500)
+        app = (await page.inner_text("#app")).lower()
+        mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
+        check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
+              "Friends shows you next to your friend, with only weekly totals shared")
+        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at",
+                               "planned", "last_workout", "last_title"}
+              and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
+              "Nothing else is sent to the board")
+        check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
+              "The board shows the shared weekly goal")
 
         await page.click("#me"); await page.wait_for_timeout(300)
         await page.click("#acboard"); await page.wait_for_timeout(300)
