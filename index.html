@@ -190,6 +190,25 @@ main>.row.between>button{flex:none;white-space:nowrap}
 .mcard .muted{color:var(--gmuted)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
+.rings{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.ring{position:relative;display:flex;flex-direction:column;align-items:center}
+.ring svg{width:100%;max-width:104px;display:block}
+.ring circle{fill:none;stroke-width:6}
+.ring .trk{stroke:var(--chip)}
+.ring .arc{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .5s var(--ease)}
+.ring.done .arc{stroke:var(--good)}
+.ring b{position:absolute;top:0;left:0;right:0;aspect-ratio:1;max-width:104px;margin:0 auto;display:grid;place-items:center;font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:.01em}
+.ring span{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:4px}
+.ring small{font-size:11.5px;color:var(--muted)}
+.wkstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:12px 0 8px;text-align:center}
+.wd span{display:block;font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:4px}
+.wd i{display:grid;place-items:center;height:30px;border-radius:9px;border:1.5px solid var(--line);font-style:normal;font-weight:700;font-size:13px;color:var(--card)}
+.wd.rest i{border-style:dashed;opacity:.55}
+.wd.plan i{border-color:var(--accent);background:var(--accent-soft)}
+.wd.done i{background:var(--good);border-color:var(--good)}
+.wd.miss i{border-color:var(--warn)}
+.wd.now span{color:var(--accent)}
+.wd.now i{box-shadow:0 0 0 3px var(--accent-soft)}
 #auth{display:none;max-width:420px;margin:0 auto;padding:24px 16px 40px}
 body.signedout #auth{display:block}
 body.signedout main,body.signedout nav,body.signedout #timer,body.signedout #status,body.signedout #me,body.signedout #hsub{display:none!important}
@@ -530,6 +549,40 @@ function tick(){const left=Math.round((TM.end-Date.now())/1000);const el=$('#tle
 function stopTimer(){clearInterval(TM.iv);$('#timer').classList.remove('show','over')}
 $('#timer').addEventListener('click',e=>{const t=e.target.dataset.t;if(!t)return;if(t==='stop')return stopTimer();TM.end+= +t*1000;if(TM.end-Date.now()>0)$('#timer').classList.remove('over');tick()});
 
+// ---------- weeks and streaks (shared by Today, Progress and the board) ----------
+const weekStart=k=>addDays(k,-parseKey(k).getDay());
+const trainedDates=()=>new Set(Object.values(S.workouts).filter(trained).map(w=>w.date));
+const plannedPerWeek=()=>PROG().sched.filter(k=>k!=='rest'&&dayOf(k)).length;
+// Totals for the week starting on Sunday `ws`, up to today.
+function weekStats(ws){
+  const td=today(),tr=trainedDates(),t=T();let workouts=0,proteinDays=0;const steps=[],cal=[];
+  for(let i=0;i<7;i++){const k=addDays(ws,i);if(k>td)break;if(tr.has(k))workouts++;const d=S.days[k];if(!d)continue;
+    if((d.food||[]).length){const f=foodTotals(d);cal.push(f.c);if(f.p>=t.pro)proteinDays++}
+    if(num(d.steps))steps.push(num(d.steps))}
+  return {workouts,proteinDays,steps:steps.length?Math.round(avg(steps)):0,cal:cal.length?Math.round(avg(cal)):0};
+}
+// weeks: weeks in a row with every planned workout done (this week counts once it's complete).
+// pro: days in a row hitting protein (today counts once it's hit).
+function streaks(){
+  const td=today(),plan=plannedPerWeek();let weeks=0,pro=0;
+  if(plan)for(let i=0,ws=weekStart(td);i<52;i++,ws=addDays(ws,-7)){if(weekStats(ws).workouts>=plan)weeks++;else if(i>0)break}
+  const hit=k=>{const d=S.days[k];return !!d&&foodTotals(d).p>=T().pro};
+  for(let k=hit(td)?td:addDays(td,-1);hit(k);k=addDays(k,-1))pro++;
+  return {weeks,pro};
+}
+function weekStrip(k){
+  const ws=weekStart(k),td=today(),tr=trainedDates();
+  return `<div class="wkstrip">`+DAYNAMES.map((n,i)=>{const x=addDays(ws,i),plan=schedOn(x)!=='rest';
+    const st=tr.has(x)?'done':plan?(x<td?'miss':'plan'):'rest';
+    return `<div class="wd ${st}${x===td?' now':''}" title="${n}: ${({done:'done',miss:'missed',plan:'planned',rest:'rest'})[st]}"><span>${n[0]}</span><i>${st==='done'?'✓':''}</i></div>`}).join('')+`</div>`;
+}
+function ring(v,t,label,unit=''){
+  const C=2*Math.PI*26,pct=Math.max(0,Math.min(1,t?v/t:0));
+  return `<div class="ring ${t&&v>=t?'done':''}"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="trk"/><circle cx="32" cy="32" r="26" class="arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C*(1-pct)).toFixed(1)}" transform="rotate(-90 32 32)"/></svg><b>${fmt(v)}</b><span>${label}</span><small>of ${fmt(t)}${unit}</small></div>`;
+}
+const STEP_GOAL=8000;
+function hero(d,t){const tot=foodTotals(d);return `<div class="card" id="hero"><div class="rings">${ring(tot.c,t.cal,'Calories')}${ring(tot.p,t.pro,'Protein',' g')}${ring(num(d.steps)||0,STEP_GOAL,'Steps')}</div></div>`}
+
 // ---------- toast ----------
 function toast(msg){const el=$('#toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2600)}
 
@@ -585,7 +638,7 @@ function refreshFood(d,changed,anchor){
   const fs=$('#fsum'),fl=$('#flog');if(!fs||!fl){render();return}
   const y0=anchor?anchor.getBoundingClientRect().top:null;
   const oldW=[...fs.querySelectorAll('.bar>div')].map(x=>x.style.width),oldN=[...fs.querySelectorAll('b[data-n]')].map(x=>+x.dataset.n);
-  fs.outerHTML=foodSum(d,T());fl.outerHTML=foodLog(d);
+  fs.outerHTML=foodSum(d,T());fl.outerHTML=foodLog(d);{const hr=$('#hero');if(hr)hr.outerHTML=hero(d,T())}
   const nfs=$('#fsum');
   nfs.querySelectorAll('.bar>div').forEach((x,j)=>{const w=x.style.width;x.style.transition='none';x.style.width=oldW[j]||'0%';void x.offsetWidth;x.style.transition='';x.style.width=w});
   nfs.querySelectorAll('b[data-n]').forEach((x,j)=>{x.textContent=fmt(oldN[j]??0);countUp(x,oldN[j]??0,+x.dataset.n)});
@@ -600,7 +653,10 @@ function viewToday(){
   let h=`<div class="row between"><button data-act="day" data-v="-1">◀</button><b>${isToday?'Today · ':''}${nice(k)}</b><div class="row"><button data-act="day" data-v="1" ${isToday?'disabled style="visibility:hidden" aria-hidden="true"':''}>▶</button></div></div>`;
   if(!isToday)h+=`<div style="text-align:center"><button class="link" data-act="gotoday">Jump to today</button></div>`;
   h+=newPlanCard();
-  h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">Open workout</button>`}</div>${(()=>{const sv=num(d.steps)||0;return `<div class="row between" style="margin-top:10px"><span>Steps</span><span><b>${fmt(sv)}</b> / 10,000</span></div>${bar(sv,10000)}<div class="muted">${sv>=8000?'<span class="good">Step goal hit ✓</span>':fmt(8000-sv)+' to 8k'} · update it under Body &amp; habits</div>`})()}</div>`;
+  h+=hero(d,t);
+  {const sk=streaks(),plan=plannedPerWeek(),wk=weekStats(weekStart(k));
+   h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">${trainedDates().has(k)?'Open workout ✓':'Open workout'}</button>`}</div>
+    ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div></div>`}
   const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
   h+=`<div class="card"><h2>Body & habits</h2><div class="grid2">
    ${fld('weight','Weight (lbs, morning)',(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})())}${fld('sleep','Sleep (hrs)','7.5')}
@@ -834,7 +890,7 @@ function viewProgress(){
   const y=addDays(td,-1);const fd=[];for(let i=0;i<7;i++){const d=S.days[addDays(y,-i)];if(d&&(d.food||[]).length)fd.push(foodTotals(d))}
   const pHit=fd.filter(x=>x.p>=t.pro).length;
   const cr=win(td,7,d=>d.creatine?1:null).length,sl=avg(win(td,7,d=>num(d.sleep))),st=avg(win(td,7,d=>num(d.steps))),cd=win(td,7,d=>num(d.cardio)).reduce((x,y)=>x+y,0);
-  const wk=Object.values(S.workouts).filter(w=>w.date>addDays(td,-7)&&trained(w)).length,planned=PROG().sched.filter(k=>k!=='rest'&&dayOf(k)).length;
+  const wk=Object.values(S.workouts).filter(w=>w.date>addDays(td,-7)&&trained(w)).length,planned=plannedPerWeek();
   h+=`<div class="card"><h2>Last 7 days</h2><div class="kpis">
     <div class="kpi"><b>${fd.length?fmt(avg(fd.map(x=>x.c))):'–'}</b><span>avg cal (target ${fmt(t.cal)})</span></div>
     <div class="kpi"><b>${fd.length?fmt(avg(fd.map(x=>x.p)))+' g':'–'}</b><span>avg protein (target ${t.pro})</span></div>
