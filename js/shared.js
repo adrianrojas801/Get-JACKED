@@ -107,25 +107,25 @@ function h2hCard(){
   const sc=weekScore(now),order=now.slice().sort((a,b)=>sc.pts[b.user_id]-sc.pts[a.user_id]),who=u=>u===ME.user.id?'You':esc(name[u]);
   const wins={};let ties=0,weeks=0;
   for(const [wk,rows] of Object.entries(byWeek)){if(wk>=ws||rows.length<2)continue;weeks++;const w=weekScore(rows).winner;if(w)wins[w]=(wins[w]||0)+1;else ties++}
-  return `<div class="card"><h2>Head to head</h2><div class="h2h">${order.map(r=>`<div class="${sc.winner===r.user_id?'lead':''}"><b>${sc.pts[r.user_id]}</b><span>${who(r.user_id)}</span></div>`).join('')}</div>
+  return `<div class="card">${titled('h2h','Head to head','One point for each line you’re clearly ahead on this week. Workouts counts the share of your own plan you’ve done, so different plans are fair. A tie gives nobody the point.')}<div class="h2h" style="margin-top:10px">${order.map(r=>`<div class="${sc.winner===r.user_id?'lead':''}"><b>${sc.pts[r.user_id]}</b><span>${who(r.user_id)}</span></div>`).join('')}</div>
     <table class="simple board"><tr><th></th>${order.map(r=>`<th>${who(r.user_id)}</th>`).join('')}</tr>${sc.cats.map((c,i)=>`<tr><td>${c.label}</td>${order.map(r=>`<td>${c.lead===r.user_id?'<b class="good">':''}${H2H[i][2](r)}${c.lead===r.user_id?'</b>':''}</td>`).join('')}</tr>`).join('')}</table>
-    <div class="muted" style="margin-top:8px">One point for each line you’re clearly ahead on this week. Workouts counts the share of your own plan you’ve done, so different plans are fair.</div>
     ${weeks?`<div class="banner" style="margin:10px 0 0"><b>Season · last ${weeks} week${weeks>1?'s':''}</b><div>${order.map(r=>`${who(r.user_id)} ${wins[r.user_id]||0}`).join(' · ')}${ties?` · ${ties} tied`:''}</div></div>`:'<div class="muted" style="margin-top:6px">The season score starts once a full week is in.</div>'}</div>`;
 }
 function boardCard(){
-  const head=`<div class="card"><h2>The board</h2>`;
+  const head=`<div class="card">${titled('board','The board','Strength is the average change in your best sets over the last 4 weeks. Only these totals and the name of your latest session are shared. You can turn sharing off under your account.')}<div style="height:10px"></div>`;
   if(!sharing())return head+`<p class="muted" style="margin:0">You’re not on the board. Turn on sharing under your account (top right) to compare weekly totals with your friends.</p></div>`;
   const pals=buddyLine();
   boardRows();
   if(S.board==null)return head+`<div class="muted">Loading…</div></div>`;
   if(S.boardErr)return head+`<div class="muted">The board isn’t available right now.</div></div>`;
+  // Until a friend has logged something there's nothing to compare, so say that in one line.
+  if(!S.board.some(r=>r.user_id!==ME.user.id))return `<div class="card"><b>Friends</b><div class="muted">You’re the only one here so far. Your friends show up once they log a workout.</div></div>`;
   const ws=weekStart(today()),wk=S.boardWeek==='last'?addDays(ws,-7):ws;
   const rows=S.board.filter(r=>r.week===wk).sort((a,b)=>b.workouts-a.workouts||b.protein_days-a.protein_days||b.steps-a.steps);
   const top=f=>Math.max(0,...rows.map(f)),cols=[['Workouts',r=>r.workouts,v=>v],['Protein days',r=>r.protein_days,v=>v],['Avg steps',r=>r.steps,v=>v?fmt(v):'–'],['Strength',r=>r.strength==null?-999:+r.strength,v=>v===-999?'–':(v>=0?'+':'')+v+'%']];
   const cell=([,f,show],r)=>{const v=f(r),lead=rows.length>1&&v>0&&v===top(f);return `<td>${lead?'<b class="good">':''}${show(v)}${lead?'</b>':''}</td>`};
   return head+`<div class="row" style="margin-bottom:8px"><button class="small ${wk===ws?'primary':''}" data-act="boardwk" data-v="this">This week</button><button class="small ${wk===ws?'':'primary'}" data-act="boardwk" data-v="last">Last week</button></div>
-    ${pals}${teamGoal(rows,wk!==ws)}${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
-    <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals and the name of your latest session are shared.</div></div>`;
+    ${pals}${teamGoal(rows,wk!==ws)}${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}</div>`;
 }
 
 // ---------- toast ----------

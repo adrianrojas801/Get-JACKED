@@ -31,7 +31,7 @@ function nextPhases(){
 }
 function phaseCard(){
   if(!goalReached())return '';
-  return `<div class="card newplan"><h2>You reached ${T().goal} lbs</h2><p class="muted" style="margin-top:0">Pick what’s next. This changes your calorie, protein and goal-weight targets. Your program stays the same.</p>
+  return coachOpen(`You reached ${T().goal} lbs`)+`<p class="muted" style="margin-top:0">Pick what’s next. This changes your calorie, protein and goal-weight targets. Your program stays the same.</p>
     ${nextPhases().map((p,i)=>`<div class="row between" style="margin-top:10px"><div class="grow"><b>${p.label}</b><div class="muted">${p.why} ${fmt(p.cal)} cal · ${p.pro} g protein · goal ${p.gw} lbs</div></div><button class="small ${i?'':'primary'}" data-act="phase" data-i="${i}">Choose</button></div>`).join('')}</div>`;
 }
 const phaseLine=()=>{const ps=cfg().phaseStart,wk=ps?Math.floor(daysBetween(ps,today())/7)+1:null;return GOALS[goalOf()]+(wk>0?` · week ${wk}`:'')};
@@ -46,12 +46,13 @@ function liftsMoved(from,to){
   return {up,stuck};
 }
 const lastWeek=()=>addDays(weekStart(today()),-7);
-const checkinDue=()=>{const w=weekStats(lastWeek());return cfg().checkin!==weekStart(today())&&(w.workouts>0||w.cal>0)};
+const lastWeekLogged=()=>{const w=weekStats(lastWeek());return w.workouts>0||w.cal>0};
+const checkinDue=()=>cfg().checkin!==weekStart(today())&&lastWeekLogged();
 // Last week in one card: what happened, and the few things to change this week.
 function checkinCard(canDismiss){
   const ws=lastWeek(),end=addDays(ws,6),w=weekStats(ws),plan=plannedPerWeek(),t=T(),tr=weightTrend(end),lm=liftsMoved(addDays(ws,-1),end);
   const line=(ok,txt)=>`<li><span class="${ok?'good':'warn'}">${ok?'✓':'!'}</span> ${txt}</li>`,todo=[];
-  let h=`<div class="card ${canDismiss?'newplan':''}" id="checkin"><h2>Week check-in</h2><div class="muted">${short(ws)} – ${short(end)}</div><ul class="plain ticks">`;
+  let h=coachOpen('Week check-in','id="checkin"')+`<div class="muted">${short(ws)} – ${short(end)}</div><ul class="plain ticks">`;
   h+=line(plan&&w.workouts>=plan,`${w.workouts} of ${plan||'–'} workouts`);
   if(plan&&w.workouts<plan)todo.push(`Get all ${plan} workouts in. If a day keeps getting missed, move it under Plan.`);
   if(w.cal){h+=line(w.proteinDays>=5,`Protein hit ${w.proteinDays} of 7 days · averaged ${fmt(w.cal)} cal`);
@@ -76,16 +77,17 @@ function viewProgress(){
   const t=T(),td=today(),wv=d=>num(d.weight);
   const tr=weightTrend(td),A=tr.A,B=tr.B,verdict=trendText(tr),adj=calButton(tr.adj),eta=etaText();
   const ws=weightSeries();
-  let h=`<div class="card"><h2>Bodyweight</h2><div class="kpis"><div class="kpi"><b>${A?r1(A):'–'}</b><span>7-day avg (lbs)</span></div><div class="kpi"><b>${A&&B?(A-B>=0?'+':'')+r1(A-B):'–'}</b><span>vs previous week</span></div></div>
+  let h=`<div class="card">${titled('bw','Bodyweight',`Dots are daily weigh-ins and the line is the 7-day average. ${goalOf()==='bulk'?'The goal for this bulk is':'Your goal weight is'} ${t.goal} lbs. Weigh in the morning, after the bathroom and before eating.`)}<div class="kpis" style="margin-top:10px"><div class="kpi"><b>${A?r1(A):'–'}</b><span>7-day avg (lbs)</span></div><div class="kpi"><b>${A&&B?(A-B>=0?'+':'')+r1(A-B):'–'}</b><span>vs previous week</span></div></div>
     <p style="margin:10px 0 6px">${verdict}</p>${adj}${eta?`<p class="muted" style="margin:8px 0 0">${eta}</p>`:''}
     ${chart([{pts:ws.dots,color:'var(--muted)',dots:true},{pts:ws.avgp,color:'var(--accent)'}],{goal:t.goal,xl:[short(ws.start),short(ws.end)]})}
-    <div class="muted">Dots are daily weigh-ins and the line is the 7-day average. ${goalOf()==='bulk'?'The goal for this bulk is':'Your goal weight is'} ${t.goal} lbs.</div></div>`;
-  h=(S.showCheckin?checkinCard(false):`<button class="small" data-act="checkshow" style="margin:4px 0">Last week’s check-in</button>`)+h+phaseCard();
+    </div>`;
+  h=(S.showCheckin?checkinCard(false):lastWeekLogged()?`<button class="small" data-act="checkshow" style="margin:4px 0">Last week’s check-in</button>`:'')+h+phaseCard();
   // nutrition & habits (last 7 full days)
   const y=addDays(td,-1);const fd=[];for(let i=0;i<7;i++){const d=S.days[addDays(y,-i)];if(d&&(d.food||[]).length)fd.push(foodTotals(d))}
   const pHit=fd.filter(x=>x.p>=t.pro).length;
   const cr=win(td,7,d=>d.creatine?1:null).length,sl=avg(win(td,7,d=>num(d.sleep))),st=avg(win(td,7,d=>num(d.steps))),cd=win(td,7,d=>num(d.cardio)).reduce((x,y)=>x+y,0);
   const wk=Object.values(S.workouts).filter(w=>w.date>addDays(td,-7)&&trained(w)).length,planned=plannedPerWeek();
+  const l7=h.length;
   h+=`<div class="card"><h2>Last 7 days</h2><div class="kpis">
     <div class="kpi"><b>${fd.length?fmt(avg(fd.map(x=>x.c))):'–'}</b><span>avg cal (target ${fmt(t.cal)})</span></div>
     <div class="kpi"><b>${fd.length?fmt(avg(fd.map(x=>x.p)))+' g':'–'}</b><span>avg protein (target ${t.pro})</span></div>
@@ -96,7 +98,9 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
+  if(!fd.length&&!wk)h=h.slice(0,l7);   // nothing logged in the last week: leave the card out
   h+=measCard()+photosCard();
+  const wl=h.length;
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -106,6 +110,7 @@ function viewProgress(){
     let msg='';if(goalOf()==='bulk'&&dWt!=null&&dWt>0.5){const ratio=dw/dWt;msg=ratio>0.12?`<span class="warn">Waist is up ${r1(dw)}" for ${r1(dWt)} lbs gained, which is faster than ideal. Pull calories back a bit.</span>`:`<span class="good">Waist +${r1(dw)}" for ${r1(dWt)} lbs gained. That’s a clean bulk.</span>`}
     h+=`<table class="simple"><tr><th>Date</th><th>Waist</th><th>Weight</th></tr>${waist.slice(-6).reverse().map(d=>`<tr><td>${short(d.date)}</td><td>${num(d.waist)}"</td><td>${num(d.weight)??'–'}</td></tr>`).join('')}</table><p>${msg}</p>`}
   h+=`</div>`;
+  if(waist.length<2)h=h.slice(0,wl);     // the waist check needs two entries to say anything
   // lifts (a section of its own: this week, sets per muscle, the chart for one lift, and records)
   const body=h;h=liftsWeekCard(td)+musclesCard(td);
   const names=liftNames();
@@ -119,7 +124,7 @@ function viewProgress(){
     h+=chart([{pts:sess.map((x,i)=>[i,x.v]),color:'var(--accent)'}],{xl:sess.length>1?[short(sess[0].date),short(sess[sess.length-1].date)]:null});
     h+=`<div class="muted">${bw?'The line is your most reps in a set each session.':'The line is your estimated 1-rep max from your best set each session.'}</div><table class="simple" style="margin-top:6px"><tr><th>Date</th><th>Best set</th><th>${bw?'Reps':'Est. 1RM'}</th></tr>${sess.slice(-8).reverse().map(x=>`<tr><td>${short(x.date)}</td><td>${x.top}</td><td>${Math.round(x.v)}</td></tr>`).join('')}</table>`}
   h+=`</div>`;
-  const sections={body:()=>body,lifts:()=>h+recordsCard(names),friends:()=>h2hCard()+boardCard()},sec=sections[S.psec]?S.psec:'body';
+  const sections={body:()=>body,lifts:()=>names.length?h+recordsCard(names):`<div class="card"><p class="muted" style="margin:0">Log a workout and your lifts, records and sets per muscle show up here.</p></div>`,friends:()=>h2hCard()+boardCard()},sec=sections[S.psec]?S.psec:'body';
   return `<div class="seg" role="tablist">${[['body','Body'],['lifts','Lifts'],['friends','Friends']].map(([v,l])=>`<button role="tab" aria-selected="${v===sec}" class="${v===sec?'on':''}" data-act="psec" data-v="${v}">${l}</button>`).join('')}</div>`+sections[sec]();
 }
 // Which lifts set a new best in the last 7 days, and which have stalled.
@@ -216,7 +221,7 @@ function suggestions(){
 }
 function suggestCard(){
   const sg=suggestions();if(!sg.length)return '';
-  return `<div class="card newplan" id="sugs"><h2>Suggested changes</h2><div class="muted">Based on your focus muscles and your lifts. Nothing changes until you tap Do it.</div>
+  return coachOpen('Suggested changes','id="sugs"')+`<div class="muted">Nothing changes until you tap Do it.</div>
     ${sg.map(s=>`<div class="sug"><b>${esc(s.text)}</b><div class="muted">${esc(s.why)}</div><div class="row" style="margin-top:6px"><button class="small primary" data-act="sugdo" data-id="${esc(s.id)}">Do it</button><button class="small" data-act="sugskip" data-id="${esc(s.id)}">Not now</button></div></div>`).join('')}</div>`;
 }
 
@@ -251,7 +256,9 @@ function photosCard(){
   if(S.photos==null||Date.now()-(S.photoAt||0)>50*60000)loadPhotos();
   const pose=POSES.some(p=>p[0]===S.pose)?S.pose:'front',mine=(S.photos||[]).filter(p=>p.pose===pose&&p.url),first=mine[0],last=mine[mine.length-1];
   const shot=(p,label)=>`<figure><img src="${esc(p.url)}" alt="${label} ${pose} photo, ${short(p.date)}" loading="lazy"><figcaption>${label} · ${short(p.date)}</figcaption></figure>`;
-  let h=`<div class="card"><h2>Photos</h2><div class="muted">Only you can see these. Same spot, same light, relaxed, every 2 weeks.</div>
+  const add=label=>`<label class="btn" for="photofile">${label}</label><input type="file" id="photofile" accept="image/*" hidden>`,note=S.photoMsg?`<div class="${S.photoMsg.endsWith('…')?'muted':'err'}" style="margin-top:6px">${esc(S.photoMsg)}</div>`:'';
+  if(S.photos&&!S.photos.length&&!S.photoErr)return `<div class="card"><div class="row between"><div><b>Progress photos</b><div class="muted">Private. Only you can see them.</div></div>${add('Add photo')}</div>${note}</div>`;
+  let h=`<div class="card">${titled('photos','Photos','Only you can see these. Use the same spot and the same light, stand relaxed, and take them every 2 weeks.')}
     <div class="seg" style="margin-top:10px">${POSES.map(([v,l])=>`<button class="${v===pose?'on':''}" data-act="pose" data-v="${v}">${l}</button>`).join('')}</div>`;
   if(S.photos==null)h+=`<div class="muted">Loading…</div>`;
   else if(S.photoErr&&!mine.length)h+=`<div class="muted">Photos aren’t available right now.</div>`;
@@ -259,9 +266,7 @@ function photosCard(){
   else{h+=`<div class="pcompare">${mine.length>1?shot(first,'First')+shot(last,'Latest'):shot(last,'Latest')}</div>`;
     if(mine.length>1||S.photoAll)h+=`<button class="link" data-act="photoall" style="margin-top:6px">${S.photoAll?'Hide the list':`All ${mine.length} ${pose} photos`}</button>`;
     if(S.photoAll)h+=`<ul class="list">`+mine.slice().reverse().map(p=>`<li><img class="pthumb" src="${esc(p.url)}" alt=""><div class="grow">${nice(p.date)}</div><button class="small ${S.photoDel===p.path?'qx':''}" data-act="photodel" data-p="${esc(p.path)}">${S.photoDel===p.path?'Tap again to delete':'Delete'}</button></li>`).join('')+`</ul>`}
-  h+=`<div class="row" style="margin-top:10px"><label class="btn" for="photofile">Add a ${pose} photo</label><input type="file" id="photofile" accept="image/*" hidden></div>`;
-  if(S.photoMsg)h+=`<div class="${S.photoMsg.endsWith('…')?'muted':'err'}" style="margin-top:6px">${esc(S.photoMsg)}</div>`;
-  return h+`</div>`;
+  return h+`<div class="row" style="margin-top:10px">${add(`Add a ${pose} photo`)}</div>${note}</div>`;
 }
 
 // ---------- measurements ----------
@@ -271,6 +276,7 @@ const measDays=()=>Object.values(S.days).filter(d=>d&&MEAS.some(([f])=>num(d[f])
 const measDue=()=>{const ds=measDays();return !ds.length||daysBetween(ds[ds.length-1].date,today())>=14};
 function measCard(){
   const ds=measDays();
+  if(!ds.length)return '';
   let h=`<div class="card"><h2>Measurements</h2>`;
   if(!ds.length)return h+`<p class="muted" style="margin:0">Measure your chest, shoulders, arm and waist every 2 weeks (on the Today tab, under Body). This shows whether the weight is going where you want it.</p></div>`;
   const rows=MEAS.map(([f,l])=>{const xs=ds.filter(d=>num(d[f]));if(!xs.length)return '';const a=num(xs[0][f]),b=num(xs[xs.length-1][f]),ch=r1(b-a);
@@ -299,6 +305,7 @@ const setsNote=(v,f)=>v>SETS_HI?['warn',' · a lot']:v<(f?SETS_LO:SETS_MIN)?['wa
 const focusList=()=>Array.isArray(cfg().focus)?cfg().focus.filter(k=>MUS_NAME[k]):[];
 const mainLiftOf=k=>n=>{const mm=musFor(n);return !!mm&&mm.p.includes(k)};
 function musclesCard(td){
+  if(!liftNames().length)return '';
   const {sets,by}=muscleWork(td),focus=focusList(),inPlan=new Set(Object.values(PROG().days).flatMap(d=>d.ex.flatMap(e=>(musFor(e.n)||{p:[]}).p)));
   const keys=Object.keys(MUS_NAME).filter(k=>sets[k]||inPlan.has(k)||focus.includes(k));
   if(!keys.length)return '';
@@ -313,8 +320,8 @@ function musclesCard(td){
     detail=`<div class="banner" style="margin:8px 0"><div class="row between"><b>${MUS_NAME[sel]} · ${r1(sets[sel]||0)} sets</b><button class="small" data-act="focus" data-k="${sel}">${f?'★ Focus':'☆ Make it a focus'}</button></div>
       <div class="muted" style="margin-top:4px">${did.length?'This week: '+did.map(([n,v])=>`${esc(n)} (${r1(v)})`).join(', '):'Nothing trained it in the last 7 days.'}</div>
       <div class="muted">${plan.length?'In your plan: '+plan.map(esc).join(', '):'Nothing in your plan targets it directly.'}</div></div>`}
-  return `<div class="card"><h2>Sets per muscle</h2><div class="muted">Last 7 days. Aim for about ${SETS_LO}–${SETS_HI} hard sets a week for your focus muscles (★). They start from the goals you gave at setup, and you can tap a star to change them. Other muscles keep growing on less. Brighter means more sets.</div>
-    <div style="text-align:center;margin:10px 0 4px">${bodySVG(lv,'mfig-xl',{tap:true,sel})}</div>${sel?detail:'<div class="muted" style="text-align:center">Tap a muscle to see what trained it.</div>'}<ul class="mlist">${keys.map(row).join('')}</ul>
+  return `<div class="card">${titled('sets','Sets per muscle',`Hard sets in the last 7 days. Aim for about ${SETS_LO}–${SETS_HI} a week for your focus muscles (★). They start from the goals you gave at setup, and you can tap a star to change them. Other muscles keep growing on less. Brighter means more sets. Tap a muscle to see what trained it.`)}
+    <div style="text-align:center;margin:10px 0 4px">${bodySVG(lv,'mfig-xl',{tap:true,sel})}</div>${sel?detail:''}<ul class="mlist">${keys.map(row).join('')}</ul>
     ${low.length?`<p class="warn" style="margin:8px 0 0">${low.join(' and ')} ${low.length>1?'are':'is'} a focus but under ${SETS_LO} sets. Add a few sets under Plan.</p>`:''}</div>`;
 }
 // Best set ever for each lift, newest record first.

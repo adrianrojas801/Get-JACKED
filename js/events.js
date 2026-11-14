@@ -137,6 +137,8 @@ app.addEventListener('click',e=>{
   else if(act==='sugdo'){const sg=suggestions().find(x=>x.id===ds.id);if(!sg)return;const before=clone(cfg()),s=clone(cfg());sg.apply(s);putSettings(s);render();toast('Plan updated: '+sg.text,()=>putSettings(before))}
   else if(act==='gosug'){S.tab='plan';render();window.scrollTo(0,0)}
   else if(act==='sugskip'){const s=clone(cfg());s.skipSug=Object.assign({},s.skipSug,{[ds.id]:weekStart(today())});putSettings(s);render()}
+  else if(act==='info'){S.info=Object.assign({},S.info,{[ds.id]:!(S.info&&S.info[ds.id])});render()}
+  else if(act==='welcomed'){const s=clone(cfg());s.welcomed=true;putSettings(s);render()}
   else if(act==='checkok'){const s=clone(cfg());s.checkin=weekStart(today());putSettings(s);render()}
   else if(act==='checkshow'||act==='checkhide'){S.showCheckin=act==='checkshow';render()}
   else if(act==='phase'){const p=nextPhases()[i];if(!p||!goalReached())return;const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:p.goal});s.cal=p.cal;s.pro=p.pro;s.goal=p.gw;s.phaseStart=today();putSettings(s);toast(p.label+': targets updated');render()}

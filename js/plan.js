@@ -119,7 +119,7 @@ async function checkPlan(){
 function newPlanCard(){
   const np=S.newPlan;if(!np||(S.planLater&&S.tab==='today'))return '';
   const P=np.plan.program,days=P.order.map(k=>P.days[k].t);
-  return `<div class="card newplan"><h2>Your new program is ready</h2><p>${days.length} days: ${esc(days.join(', '))}.</p><p class="muted">Switching replaces your current program${np.plan.cal||np.plan.pro?' and targets':''}. Your logged workouts, food and weigh-ins stay.</p><div class="row wrap"><button class="primary" data-act="planuse">Use it</button>${S.tab==='today'?'<button data-act="planlater">Not now</button>':''}</div></div>`;
+  return coachOpen('Your new program is ready')+`<p>${days.length} days: ${esc(days.join(', '))}.</p><p class="muted">Switching replaces your current program${np.plan.cal||np.plan.pro?' and targets':''}. Your logged workouts, food and weigh-ins stay.</p><div class="row wrap"><button class="primary" data-act="planuse">Use it</button>${S.tab==='today'?'<button data-act="planlater">Not now</button>':''}</div></div>`;
 }
 async function applyPlan(){
   const np=S.newPlan;if(!np)return;

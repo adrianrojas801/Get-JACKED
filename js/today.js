@@ -63,12 +63,27 @@ function bodyCard(k,d){
     ${measOn?`<h3>${k===today()&&measDue()?'Measurement day (every 2 weeks)':'Measurements (in)'}</h3><div class="grid2">${MEAS.map(([f,l,ph])=>fld(f,l,ph)).join('')}</div>`:''}
     ${hidden||S.bodyMore||!measOn?`<button class="link" data-act="bodymore" style="margin-top:6px">${S.bodyMore?'Show less':'Sleep, cardio, measurements'}</button>`:''}</div>`;
 }
+// ---------- getting set up ----------
+// A short checklist on Today for anyone who hasn't done the basics yet. It goes away when they're done, or on Hide.
+const firstSteps=()=>[
+  ['Log a workout',Object.values(S.workouts).some(trained),'Tap Open workout and log your sets.'],
+  ['Weigh in',Object.values(S.days).some(d=>d&&num(d.weight)),'In the morning, before you eat. It goes under Body.'],
+  ['Log a day of food',Object.values(S.days).some(d=>d&&(d.food||[]).length),'Tap a food under Food, or All foods for the full list.'],
+  ['Take your starting measurements',measDays().length>0,'Under Body, tap Sleep, cardio, measurements.']];
+function firstStepsCard(){
+  if(cfg().welcomed)return '';
+  const st=firstSteps(),done=st.filter(x=>x[1]).length;if(done===st.length)return '';
+  return coachOpen('Getting set up','id="firststeps"')+`<div class="muted">${done} of ${st.length} done</div>${bar(done,st.length)}
+    <ul class="plain ticks" style="margin-top:8px">${st.map(([t,ok,how])=>`<li><span class="${ok?'good':'muted'}">${ok?'✓':'○'}</span> ${ok?`<span class="muted">${t}</span>`:`<b>${t}</b><div class="muted" style="margin-left:22px">${how}</div>`}</li>`).join('')}</ul>
+    <button class="link" data-act="welcomed">Hide this</button></div>`;
+}
 function viewToday(){
   const k=S.dk,d=dayDoc(k),t=T();
   const isToday=k===today();const prog=schedOn(k);
   let h=`<div class="row between"><button data-act="day" data-v="-1">◀</button><b>${isToday?'Today · ':''}${nice(k)}</b><div class="row"><button data-act="day" data-v="1" ${isToday?'disabled style="visibility:hidden" aria-hidden="true"':''}>▶</button></div></div>`;
   if(!isToday)h+=`<div style="text-align:center"><button class="link" data-act="gotoday">Jump to today</button></div>`;
   h+=newPlanCard();
+  if(isToday)h+=firstStepsCard();
   if(isToday&&checkinDue())h+=checkinCard(true);
   h+=hero(d,t);
   {const sk=streaks(),plan=plannedPerWeek(),wk=weekStats(weekStart(k));

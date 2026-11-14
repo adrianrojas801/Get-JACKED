@@ -20,6 +20,12 @@ const fmt=v=>Math.round(v).toLocaleString();
 const e1rm=(w,r)=>w*(1+r/30);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
+// ---------- shared card pieces ----------
+// Advice always looks the same wherever it shows up: a "Coach" label, a title, then the advice and its buttons.
+const coachOpen=(title,attrs='')=>`<div class="card coach" ${attrs}><div class="eyebrow">Coach</div><h2>${title}</h2>`;
+// A card title with an (i) button. The explanation stays out of the way until it's tapped.
+function titled(id,title,text){const on=!!(S.info&&S.info[id]);return `<div class="row between"><h2 style="margin:0">${title}</h2><button class="ibtn ${on?'on':''}" data-act="info" data-id="${id}" aria-expanded="${on}" aria-label="About ${title}">i</button></div>${on?`<div class="muted infotext">${text}</div>`:''}`}
+
 // ---------- state ----------
 const S={db:null,days:{},workouts:{},settings:{},tab:'today',dk:today(),wd:today(),wp:null,note:null,lift:null,swap:null,addEx:false,copied:false,needRender:false,known:{},ready:{},boot:true,loaded:false};
 try{const t=localStorage.getItem('gt_tab');if(t)S.tab=t}catch(e){}
