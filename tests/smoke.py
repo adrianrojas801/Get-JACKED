@@ -289,9 +289,22 @@ async def main():
 
         await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
         app = (await page.inner_text("#app")).lower()
-        check(await page.locator(".seg button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
+        check(await page.locator(".seg[role=tablist] button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
               "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        png = __import__("base64").b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+        for stamp in ("a", "b"):
+            await page.set_input_files("#photofile", {"name": f"{stamp}.png", "mimeType": "image/png", "buffer": png}); await page.wait_for_timeout(500)
+        up = await page.evaluate("window.__lastUpload")
+        check(up["path"].startswith(f"u1/{ago(0)}_front_") and up["path"].endswith(".jpg") and up["type"] == "image/jpeg"
+              and await page.locator(".pcompare img").count() == 2,
+              "A progress photo is shrunk to a JPEG, stored in your own folder, and shown first against latest")
+        await page.click("button[data-act=photoall]"); await page.wait_for_timeout(150)
+        await page.click("button[data-act=photodel]"); await page.wait_for_timeout(150)
+        still = len(await page.evaluate("window.__photos"))
+        await page.click("button[data-act=photodel]"); await page.wait_for_timeout(400)
+        check(still == 2 and len(await page.evaluate("window.__photos")) == 1, "Deleting a photo takes two taps")
+        app = (await page.inner_text("#app")).lower()
         check("measurements" in app and '+0.5"' in app and "chest, arm are growing" in app and "next measurement" in app,
               "Body shows tape measurements, first against latest")
         await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
