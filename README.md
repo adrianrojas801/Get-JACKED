@@ -18,6 +18,17 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 - `docs`: each person's tracker data, keyed by `(user_id, coll, id)`, where `coll` is `days`, `workouts` or `settings`. The RLS policy only allows `user_id = auth.uid()`. Each person's workout program, targets and quick-add foods live in their own `settings` doc.
 - `patch_doc(coll, id, patch)`: merges changed fields into a doc so two devices don't overwrite each other's edits.
 
+### What's shared between people
+
+Logs are private. Two things are shared on purpose:
+
+- **The board** (Progress tab): four weekly totals per person, which are workouts, protein days, average steps and strength change. Turn it off under your account with **Show me on the board**.
+- **Intake answers**: sent to the admin once, so a custom program can be written.
+
+### Automatic steps
+
+Under your account, tap **Set up automatic steps** and follow the steps to build a Shortcut on your iPhone. It sends your Apple Health step count to the app with a personal token. **Make a new link** replaces the token, and **Turn off** deletes it.
+
 ## How deploys work
 
 1. Open a PR. **CI** runs: JavaScript syntax, SQL migration checks (parse, RLS on every table, no `anon` grants), a headless smoke test, and a secret scan. **Merge gate** passes once all of them pass, and it's the check `main` requires. The PR also gets labels (`app`, `database`, `ci`, `docs`) based on the files it changes. Vercel posts a **preview URL** on the PR.
