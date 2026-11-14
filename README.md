@@ -36,12 +36,8 @@ To change the database, add a new file to `supabase/migrations/` named `YYYYMMDD
    - Secrets: `SUPABASE_ACCESS_TOKEN` (supabase.com → Account → Access Tokens), `SUPABASE_DB_PASSWORD`, `ADMIN_EMAIL`
    - Variables: `SUPABASE_PROJECT_ID` = `tdjogrkeovanphgorvys`, `SITE_URL` = the Vercel production URL
 3. **GitHub → Settings → General → Pull Requests:** allow merge commits only (uncheck squash and rebase). **Settings → Rules → Rulesets:** a ruleset on `main` that requires a pull request and the **Merge gate** status check, with **Require linear history** off.
-4. **Your account:** Supabase → Authentication → Users → Add user → Create new user (email and a temporary password, with **Auto Confirm User** checked). Then run Actions → Deploy once so you become admin, sign in, and change the password under Plan → Account.
+4. **Your account:** Supabase → Authentication → Users → Add user → Create new user (email and a temporary password, with **Auto Confirm User** checked). Then run Actions → Deploy once so you become admin, sign in, and change the password from the round account button in the top-right corner.
 
 ## Adding a person
 
-Authentication → Users → Add user → Create new user (with Auto Confirm checked). Send them the link and their temporary password, and have them change it under Plan → Account. The first time they sign in, a short set of questions builds their workout program and daily targets. They can edit both later under Plan.
-
-## Moving data in
-
-In the old tracker, open Plan → Backup → **Copy all data**. In this app, open Plan → Import data, paste it and tap **Import**.
+Authentication → Users → Add user → Create new user (with Auto Confirm checked). Send them the link and their temporary password, and have them change it from the round account button in the top-right corner. The first time they sign in, a short set of questions builds their workout program and daily targets. They can edit both later under Plan.

@@ -1,4 +1,4 @@
-"""Headless smoke test: sign-in, intake, program editor, save, import, migration, reload.
+"""Headless smoke test: sign-in, intake, program editor, account page, save, migration, reload.
 Runs against tests/mock-supabase.js."""
 import asyncio, json, os, pathlib, sys
 from playwright.async_api import async_playwright
@@ -68,6 +68,9 @@ async def main():
 
         check("set up your plan" in (await page.inner_text("#app")).lower()
               and not await page.is_visible("#nav"), "New person sees the intake form, without the tabs")
+        await page.click("#me"); await page.wait_for_timeout(150)
+        check("Sign out" in await page.inner_text("#app"), "Account menu opens during setup (so you can sign out)")
+        await page.click("button[data-act=meback]"); await page.wait_for_timeout(150)
         await page.click("button[data-act=intake]"); await page.wait_for_timeout(150)
         check("Fill in" in await page.inner_text("#in_err"), "Intake asks for missing answers")
 
@@ -110,17 +113,20 @@ async def main():
         check("db bench press" in (await page.inner_text("#app")).lower(), "Workout uses the edited program")
 
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)
-        await page.fill("#impbox", '{"settings":{"cal":2600},"days":{"2026-11-08":{"date":"2026-11-08","food":[],"steps":6539}},"workouts":{}}')
-        await page.click("button[data-act=import]"); await page.wait_for_timeout(700)
-        check("Imported 2 items" in await page.inner_text("#app"), "Import from a backup works")
-        s = await settings(page)
-        check(s.get("cal") == 2600 and s.get("program", {}).get("sched", [None])[1] == "upA" and not s.get("legacy"),
-              "Importing an old backup keeps your program")
+        check("Copy all data" not in await page.inner_text("#app") and "Sign out" not in await page.inner_text("#app"),
+              "Account and backup are no longer in Plan")
+        await page.click("#me"); await page.wait_for_timeout(200)
+        app = await page.inner_text("#app")
+        check((await page.inner_text("#me")).upper() == "P" and "Sign out" in app and "Copy all data" in app,
+              "Header button opens Account & data (account, backup)")
 
         await page.reload(); await page.wait_for_timeout(800)
         check(not await page.evaluate("document.body.classList.contains('signedout')"), "Stays signed in after reload")
         check("set up your plan" not in (await page.inner_text("#app")).lower(), "No intake again after reload")
 
+        await page.click("#me"); await page.wait_for_timeout(150)
+        await page.click("#me"); await page.wait_for_timeout(150)
+        check("Account" not in await page.inner_text("#app"), "Tapping the header button again goes back")
         for tab in ["today", "workout", "progress", "plan"]:
             await page.click(f"nav button[data-tab={tab}]"); await page.wait_for_timeout(150)
         check(True, "All four tabs open")
