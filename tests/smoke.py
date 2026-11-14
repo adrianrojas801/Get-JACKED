@@ -203,26 +203,43 @@ async def main():
         sunday = ago((today.weekday() + 1) % 7)
         lift = lambda w, r: {"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90, "ti": 0, "sets": [{"w": w, "r": r, "d": True}] * 3}
         seed = {"settings/main": {"cal": 2400, "pro": 150, "goal": 170, "program": {
-                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90}]}},
+                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90},
+                                                           {"n": "Cable curl", "s": 3, "r": "10-12", "rest": 60}]}},
                     "order": ["a"], "sched": ["a"] * 7}},
                 f"days/{ago(1)}": {"date": ago(1), "food": [{"n": "Burrito", "c": 700, "p": 40, "q": 1}], "steps": 9000}}
         for n, reps in ((35, 10), (28, 8), (21, 8), (7, 8)):  # best 5 weeks ago, then three sessions without beating it
             seed[f"workouts/{ago(n)}_a"] = {"date": ago(n), "prog": "a", "title": "Back day", "done": True, "ex": [lift(120, reps)]}
-        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2}]
+        seed[f"workouts/{ago(7)}_a"]["ex"].append({"n": "Cable curl", "s": 3, "r": "10-12", "rest": 60, "ti": 1,
+                                                   "sets": [{"w": 40, "r": r, "d": True} for r in (10, 10, 9)]})
+        for n in (2, 3, 4):
+            seed[f"days/{ago(n)}"] = {"date": ago(n), "food": [], "weight": 171}
+        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2,
+                  "planned": 3, "last_workout": ago(0), "last_title": "Push"}]
         page = await new_page(browser, errors, seed, buddy)
         await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
         app = (await page.inner_text("#app")).lower()
         check(await page.locator("#hero .ring").count() == 3 and await page.locator(".wkstrip .wd").count() == 7
               and "workouts this week" in app, "Today shows the three rings and the week strip")
+        check("week check-in" in app and "1 of 7 workouts" in app and "stalled: lat pulldown" in app,
+              "Today opens with last week's check-in")
+        await page.click("button[data-act=checkok]"); await page.wait_for_timeout(300)
+        check("week check-in" not in (await page.inner_text("#app")).lower() and (await settings(page)).get("checkin") == sunday,
+              "Got it puts the check-in away until next week")
         check("recent" in app and "same as yesterday" in app and "idea:" in app,
               "Today offers recent foods, yesterday's log and a protein idea")
         await page.click("button[data-act=recent]"); await page.wait_for_timeout(300)
         food = await page.evaluate(f"(window.__docs['days/{ago(0)}']||{{}}).food||[]")
         check(len(food) == 1 and food[0]["n"] == "Burrito" and "700" in await page.inner_text("#hero"),
               "Tapping a recent food logs it and updates the rings")
+        check("sam finished push today" in (await page.inner_text("#app")).lower(), "Today shows that your friend trained")
 
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
-        check("no new best in 3 sessions" in (await page.inner_text("#app")).lower(), "A stalled lift gets a back-off suggestion")
+        app = await page.inner_text("#app")
+        check("no new best in 3 sessions" in app.lower() and "110 × 12, 12, 12" in app, "A stalled lift gets a back-off suggestion and a lighter target")
+        check("40 × 11, 10, 9" in app, "Each exercise shows today's target: last time plus one rep")
+        await page.click("button[data-act=setdone][data-i='1'][data-j='0']"); await page.wait_for_timeout(300)
+        done = (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']"))["ex"][1]["sets"][0]
+        check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
         await page.fill("input[data-w='0'][data-s='0'][data-f=w]", "125"); await page.fill("input[data-w='0'][data-s='0'][data-f=r]", "10")
         await page.click("button[data-act=setdone]"); await page.wait_for_timeout(300)
         check("New best: Lat pulldown 125×10" in await page.inner_text("#toast"), "Beating your best shows a toast")
@@ -235,8 +252,24 @@ async def main():
         mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
         check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
               "The board shows you next to your friend, with only weekly totals shared")
-        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at"},
+        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at",
+                               "planned", "last_workout", "last_title"}
+              and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
               "Nothing else is sent to the board")
+        check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
+              "The board shows the shared weekly goal")
+
+        check("sets per muscle" in app and "lats" in app, "Progress shows weekly sets per muscle")
+        await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
+        check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
+              "Marking a focus muscle saves it and flags it when it's under 10 sets")
+        check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
+        s = await settings(page)
+        check(s["profile"]["goal"] == "cut" and s["cal"] == 1750 and s["pro"] == 170 and s["goal"] == 162 and s["phaseStart"] == ago(0),
+              "Choosing a mini-cut sets the new calorie, protein and goal-weight targets")
+        await page.click("button[data-act=checkshow]"); await page.wait_for_timeout(200)
+        check("week check-in" in (await page.inner_text("#app")).lower(), "The check-in can be reopened from Progress")
 
         await page.click("#me"); await page.wait_for_timeout(300)
         await page.click("#acboard"); await page.wait_for_timeout(300)
@@ -250,6 +283,23 @@ async def main():
         check("Automatic steps are on" in await page.inner_text("#app"), "Automatic steps shows as on afterwards")
         await page.click("button[data-act=stepoff]"); await page.wait_for_timeout(300)
         check("set up automatic steps" in (await page.inner_text("#app")).lower(), "Automatic steps can be turned off")
+
+        # ---- no signal ----
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(200)
+        await page.evaluate("sessionStorage.setItem('mockoffline','1')")
+        await page.fill("input[data-day=weight]", "172.4"); await page.wait_for_timeout(1800)
+        today_doc = f"window.__docs['days/{ago(0)}']||{{}}"
+        check("Offline" in await page.inner_text("#status") and (await page.evaluate(today_doc)).get("weight") != 172.4
+              and "couldn’t save" not in (await page.inner_text("#app")).lower(), "With no signal, a change is kept on the phone without an error")
+        await page.reload(); await page.wait_for_timeout(900)
+        check(not await page.evaluate("document.body.classList.contains('signedout')")
+              and await page.input_value("input[data-day=weight]") == "172.4" and await page.locator("#hero .ring").count() == 3,
+              "The app reopens with no signal, showing your data and the unsent change")
+        await page.evaluate("sessionStorage.removeItem('mockoffline'); window.dispatchEvent(new Event('online'))")
+        await page.wait_for_timeout(5500)
+        doc = await page.evaluate(today_doc)
+        check(doc.get("weight") == 172.4 and doc.get("food") and "Saved" in await page.inner_text("#status"),
+              "Back online, the change is sent and nothing else in that day is lost")
         await browser.close()
     write_summary(errors)
     if errors:

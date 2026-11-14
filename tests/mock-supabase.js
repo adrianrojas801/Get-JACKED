@@ -6,6 +6,8 @@ window.__reqs=JSON.parse(sessionStorage.getItem('mockreqs')||'[]');
 // Shared board rows and the steps link, also kept across reloads.
 window.__board=JSON.parse(sessionStorage.getItem('mockboard')||'[]');window.__steptok=JSON.parse(sessionStorage.getItem('mocksteptok')||'null');
 const persist=()=>{sessionStorage.setItem('mockdocs',JSON.stringify(__docs));sessionStorage.setItem('mockreqs',JSON.stringify(__reqs));sessionStorage.setItem('mockboard',JSON.stringify(__board));sessionStorage.setItem('mocksteptok',JSON.stringify(__steptok))};
+// Set sessionStorage.mockoffline = '1' to make every request fail the way it does with no signal.
+const offline=()=>sessionStorage.getItem('mockoffline')==='1';
 window.supabase={createClient(){
   let session=JSON.parse(localStorage.getItem('mocksess')||'null');
   const key=(c,i)=>c+'/'+i;
@@ -23,6 +25,7 @@ window.supabase={createClient(){
     };
     function run(){
       __calls.push([table,mode]);
+      if(offline())return {data:null,error:{message:'TypeError: Failed to fetch'}};
       if(!session)return {data:null,error:{status:401,message:'no auth'}};
       if(table==='profiles'){if(mode==='update')return {error:null};const me={id:'u1',display_name:'pablo',is_admin:true};return {data:single?me:[me],error:null}}
       if(table==='intake_requests'){
@@ -53,6 +56,7 @@ window.supabase={createClient(){
     },
     from:qb,
     rpc:async(n,a)=>{__calls.push(['rpc',n]);
+      if(offline())return {data:null,error:{message:'TypeError: Failed to fetch'}};
       if(n==='send_intake_plan'){const r=__reqs.find(x=>x.id===a.p_id);if(!r)return {error:{message:'Request not found'}};r.plan=JSON.parse(JSON.stringify(a.p_plan));r.status='sent';persist();return {error:null}}
       if(n==='new_steps_token'){__steptok={created_at:new Date().toISOString(),last_used:null};persist();return {data:'tok_'+'a'.repeat(60),error:null}}
       if(n==='mark_intake_applied'){const r=__reqs.find(x=>x.id===a.p_id&&x.status==='sent');if(r){r.status='applied';persist()}return {error:null}}

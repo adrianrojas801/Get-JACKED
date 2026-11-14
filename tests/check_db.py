@@ -112,7 +112,10 @@ def main():
         check(fails("insert into public.board (week, name, workouts) values ('2026-11-01', 'a', 99)", A)
               and fails("insert into public.board (week, name, steps) values ('2026-11-01', 'a', 9999999)", A),
               "Board totals outside sensible ranges are rejected")
-        psql("update public.board set workouts = 5", A)
+        psql("update public.board set workouts = 5, planned = 5, last_workout = '2026-11-12', last_title = 'Push'", A)
+        check(val("select last_title || planned from public.board", B) == "Push5"
+              and fails("update public.board set planned = 9", A) and fails(f"update public.board set last_title = '{'x' * 41}'", A),
+              "The board carries the latest session's name and the planned count, within limits")
         psql("delete from public.board", A)
         check(val("select count(*) from public.board", B) == "0", "A person can update and remove their own board rows")
         check(psql("set role anon; select count(*) from public.board", ok=False).returncode != 0,

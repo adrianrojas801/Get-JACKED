@@ -224,12 +224,17 @@ body.setup #nav{display:none}
 .intake-rest{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .card.upnext{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 .card.exdone>.row.between>.grow>b::after{content:' ✓';color:var(--good)}
+ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inline-block;width:18px;font-weight:700}
+.mlist li{align-items:center}.mlist .grow{flex:1}.mlist li>span:last-child{white-space:nowrap}
+button.star{font-size:17px;padding:0 6px 0 0;color:var(--muted);line-height:1}button.star.on{color:var(--accent)}
+.buddy{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13.5px;color:var(--accent);font-weight:600}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
 details.pday summary::-webkit-details-marker{display:none}
 .pex li{align-items:flex-start}
-.pnums{display:grid;grid-template-columns:1fr 1.2fr 1.2fr;gap:6px;margin-top:6px}
+.pnums{display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1.2fr;gap:6px;margin-top:6px}
+.target{font-size:13.5px;margin-top:4px;color:var(--accent)}
 .pbtns{display:flex;flex-direction:column;gap:4px}.pbtns button.small{min-width:36px;padding:6px 0}
 .pbtns button.qx{color:var(--bad)}
 #auth .ok{color:var(--good);font-size:13px}
@@ -373,7 +378,7 @@ function calcTargets(p){
   const kg=p.weight*0.4536,cm=(p.ft*12+(p.inch||0))*2.54;
   const bmr=10*kg+6.25*cm-5*p.age+(p.sex==='f'?-161:5);
   const tdee=bmr*(ACT[p.act]||ACT.mid)[1];
-  let cal=Math.round((tdee+({bulk:250,cut:-400,maintain:0}[p.goal]||0))/50)*50;
+  let cal=Math.round((tdee+(GOAL_ADJ[p.goal]||0))/50)*50;
   cal=Math.max(cal,p.sex==='f'?1300:1600);
   const pro=Math.min(220,Math.round(p.weight*(p.goal==='cut'?1:0.9)/5)*5);
   const goal=p.gw||Math.round(p.weight+({bulk:8,cut:-10,maintain:0}[p.goal]||0));
@@ -448,7 +453,7 @@ function save(path,data,delay=0,patch=null){
   p.data=clone(data);p.dirty=true;p.since=p.since||Date.now();
   if(patch&&!p.full)p.patch=Object.assign(p.patch||{},clone(patch));else{p.full=true;p.patch=null}
   clearTimeout(p.timer);p.timer=setTimeout(()=>flush(path),delay);
-  setStatus('Saving…');
+  setStatus('Saving…');keepOutbox();keepCopy();
 }
 function mapFor(path){const c=path.split('/')[0];return c==='days'?S.days:c==='workouts'?S.workouts:null}
 async function writeDoc(path,data,patch){
@@ -463,16 +468,41 @@ async function flush(path){
   const p=pending[path];if(!p||!p.dirty)return;
   if(p.inflight){p.again=true;return}
   clearTimeout(p.timer);
-  p.inflight=true;p.dirty=false;const data=p.data,patch=p.full?null:p.patch;p.patch=null;p.full=false;let ok=true;
+  p.inflight=true;p.dirty=false;p.held=false;const data=p.data,patch=p.full?null:p.patch;p.patch=null;p.full=false;let err=null;
   try{await writeDoc(path,data,patch)}
-  catch(e){
-    if(e&&e.code==='unavailable'){await sleep(700+Math.random()*900);try{await writeDoc(path,data,patch)}catch(e2){ok=false;fail(e2)}}
-    else{ok=false;fail(e)}
-  }
+  catch(e){err=e;
+    if(e&&e.code==='unavailable'){await sleep(700+Math.random()*900);try{await writeDoc(path,data,patch);err=null}catch(e2){err=e2}}}
   p.inflight=false;
+  if(err&&err.code==='offline')return hold(path,p,patch);
+  if(err)fail(err);
   if(p.dirty||p.again){p.again=false;flush(path)}
-  else{delete pending[path];if(ok){refresh(path);if(!Object.keys(pending).length){setStatus('Saved ✓');queueBoard()}}}
+  else{delete pending[path];keepOutbox();if(!err){refresh(path);if(!Object.keys(pending).length){setStatus('Saved ✓');queueBoard()}}}
 }
+// No connection: keep the write (it's also stored on the phone) and try again later or when the phone is back online.
+function hold(path,p,patch){
+  if(patch&&!p.full)p.patch=Object.assign({},patch,p.patch||{});else{p.full=true;p.patch=null}
+  p.dirty=true;p.again=false;p.held=true;setStatus(OFFLINE_SAVED);
+  clearTimeout(p.timer);p.timer=setTimeout(()=>flush(path),20000);
+}
+
+// ---------- offline copy ----------
+// The last synced data and any writes still waiting are kept in localStorage, per person,
+// so the app opens and logs with no signal. Supabase stays the source of truth: whatever it sends replaces the copy.
+const OFFLINE_SAVED='Offline · saved on this phone';
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const lsKey=n=>'gj_'+n+'_'+(ME.user?ME.user.id:'');
+function keepCopy(){if(!ME.user||!S.loaded)return;clearTimeout(keepCopy.t);keepCopy.t=setTimeout(()=>LS.set(lsKey('copy'),{days:S.days,workouts:S.workouts,settings:S.settings,profile:ME.profile}),800)}
+function keepOutbox(){if(!ME.user)return;const out={};for(const [k,p] of Object.entries(pending))out[k]={data:p.data,patch:p.patch,full:!!p.full};if(Object.keys(out).length)LS.set(lsKey('out'),out);else LS.del(lsKey('out'))}
+// Opens from the copy on the phone, if there is one, and lines up any writes that never got sent.
+function openCopy(){
+  const c=LS.get(lsKey('copy'));if(!c||!c.settings)return false;
+  S.days=c.days||{};S.workouts=c.workouts||{};S.settings=c.settings;if(!ME.profile)ME.profile=c.profile||null;S.loaded=true;
+  const out=LS.get(lsKey('out'))||{};
+  for(const [path,o] of Object.entries(out)){const m=mapFor(path),id=path.split('/')[1];if(m)m[id]=clone(o.data);else if(path==='settings/main')S.settings=clone(o.data);
+    save(path,o.data,2500,o.full?null:o.patch)}
+  return true;
+}
+function forgetCopy(){LS.del(lsKey('copy'));LS.del(lsKey('out'));LS.del('gj_last')}
 function flushAll(){for(const k of Object.keys(pending))flush(k)}
 function fail(e){
   const c=e&&e.code;
@@ -485,9 +515,10 @@ function fail(e){
 document.addEventListener('visibilitychange',()=>flushAll());
 // Say so when the phone is offline, and send anything waiting as soon as it's back.
 window.addEventListener('offline',()=>setStatus('Offline'));
-window.addEventListener('online',()=>{if(Object.keys(pending).length){setStatus('Saving…');flushAll()}else setStatus('Saved ✓')});
+// Coming back online: the data layer refetches first (so edits merge instead of overwriting), then waiting writes go out.
+window.addEventListener('online',()=>{if(Object.keys(pending).length){setStatus('Saving…');setTimeout(flushAll,1500)}else setStatus('Saved ✓')});
 window.addEventListener('pagehide',()=>flushAll());
-setInterval(()=>{const old=Object.values(pending).some(p=>p.since&&Date.now()-p.since>5000);if(old)setStatus('Not saved yet…');},2000);
+setInterval(()=>{const ps=Object.values(pending);if(ps.some(p=>p.held))return;if(ps.some(p=>p.since&&Date.now()-p.since>5000))setStatus('Not saved yet…')},2000);
 
 // ---------- data access ----------
 function dayDoc(k){return S.days[k]?clone(S.days[k]):{date:k,food:[]}}
@@ -496,6 +527,8 @@ function putDay(k,d,delay=0){d.date=k;if(!Array.isArray(d.food))d.food=[];const 
   S.days[k]=d;if(Object.keys(patch).length)save('days/'+k,d,delay,patch)}
 function putSettings(s,delay=0){S.settings=s;save('settings/main',s,delay)}
 const wid=(date,prog)=>date+'_'+prog;
+// A logged exercise plus the "jump" set for it in the program (if it's still the same exercise there).
+function withJump(e,prog){const d=dayOf(prog),te=e.ti!=null&&d&&d.ex[e.ti];return te&&te.n===e.n&&num(te.inc)>0?Object.assign({},e,{inc:num(te.inc)}):e}
 function template(prog){const d=dayOf(prog);return d?d.ex.map((e,i)=>({n:e.n||'Exercise',s:Math.max(1,num(e.s)||3),r:e.r||'8-12',rest:num(e.rest)||90,ss:e.ss||'',note:e.note||'',i})):[]}
 function getWorkout(date,prog){
   const id=wid(date,prog);if(S.workouts[id])return clone(S.workouts[id]);
@@ -509,12 +542,33 @@ function lastFor(name,date,excludeId){
   for(const [,w] of list){const e=(w.ex||[]).find(x=>x.n===name);if(e){const sets=(e.sets||[]).filter(s=>s.d&&num(s.r));if(sets.length)return {date:w.date,sets};}}
   return null;
 }
+// ---------- today's targets (double progression) ----------
+// How much to add when it's time to go up: the exercise's own "jump" if set in the program,
+// otherwise 10 lbs on the Smith (a 5 on each side) and 5 lbs on everything else.
+const jumpFor=ex=>num(ex.inc)>0?num(ex.inc):(/smith/i.test(ex.n)?10:5);
+const repRange=ex=>{const m=String(ex.r||'').match(/(\d+)\D+(\d+)/);return m?[+m[1],+m[2]]:[8,12]};
+// What to aim for today, one {w,r} per set, or null with no history.
+//  - hit the top of the range on every set last time: add the jump and start again at the bottom of the range
+//  - stalled: about 10% off, top of the range
+//  - otherwise: same weight, one more rep on the first set that isn't at the top yet
+function targetFor(last,ex,stall){
+  if(!last)return null;
+  const [lo,hi]=repRange(ex),n=ex.sets?ex.sets.length:ex.s;
+  const base=Array.from({length:n},(_,j)=>last.sets[Math.min(j,last.sets.length-1)]);
+  const top=Math.max(...last.sets.map(s=>num(s.w)||0));
+  const all=last.sets.length>=ex.s&&last.sets.every(s=>num(s.r)>=hi);
+  if(all)return base.map(()=>({w:top+jumpFor(ex),r:lo}));
+  if(stall&&top>0)return base.map(()=>({w:Math.round(top*0.9/5)*5,r:hi}));
+  let bumped=false;
+  return base.map(s=>{let r=num(s.r);if(!bumped&&r<hi){r++;bumped=true}return {w:num(s.w)||0,r}});
+}
+const targetText=t=>{const same=t.every(x=>x.w===t[0].w);return same?`${t[0].w||'BW'} × ${t.map(x=>x.r).join(', ')}`:t.map(x=>`${x.w||'BW'}×${x.r}`).join(' · ')};
 function hint(last,ex,stall){
   if(!last)return 'First time: pick a weight you can do for '+ex.r.split('-')[0]+' reps with 1–2 left in the tank.';
   const hi=+ex.r.split('-')[1];const top=Math.max(...last.sets.map(s=>num(s.w)||0));
   const all=last.sets.length>=ex.s&&last.sets.every(s=>num(s.r)>=hi);
   if(stall&&!all&&top>0)return `<span class="warn">No new best in ${stall.n} sessions (since ${short(stall.since)}). Take about 10% off (try ${Math.round(top*0.9/5)*5} lbs), hit ${hi} reps on every set, then build back up.</span>`;
-  if(all)return `<span class="good">↑ You hit ${hi} reps on every set last time. Add weight (try ${top+5} lbs).</span>`;
+  if(all)return `<span class="good">↑ You hit ${hi} reps on every set last time. Add weight (try ${top+jumpFor(ex)} lbs).</span>`;
   return `Beat last time: keep ${top} lbs and add a rep to any set.`;
 }
 // ---------- lift stats (shared by the workout hints, finish summary, Progress and records) ----------
@@ -598,35 +652,55 @@ function hero(d,t){const tot=foodTotals(d);return `<div class="card" id="hero"><
 const sharing=()=>cfg().board!==false;
 const myName=()=>((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email||'').split('@')[0]||'Someone').trim().slice(0,40)||'Someone';
 // Average % change in each lift's best: the 4 weeks up to `end` against the 4 weeks before.
-function strengthGain(end){
+function strengthGain(end,keep){
   const a=addDays(end,-28),b=addDays(end,-56),g=[];
-  for(const n of liftNames()){const h=liftHistory(n,end),now=bestOf(h.filter(x=>x.date>a)),was=bestOf(h.filter(x=>x.date>b&&x.date<=a));if(now&&was&&was.v>0)g.push((now.v/was.v-1)*100)}
+  for(const n of liftNames()){if(keep&&!keep(n))continue;const h=liftHistory(n,end),now=bestOf(h.filter(x=>x.date>a)),was=bestOf(h.filter(x=>x.date>b&&x.date<=a));if(now&&was&&was.v>0)g.push((now.v/was.v-1)*100)}
   return g.length?Math.max(-100,Math.min(500,r1(avg(g)))):null;
 }
 function boardRow(ws){const w=weekStats(ws),end=addDays(ws,6)>today()?today():addDays(ws,6);
-  return {user_id:ME.user.id,week:ws,name:myName(),workouts:Math.min(14,w.workouts),protein_days:w.proteinDays,steps:Math.min(100000,w.steps),strength:strengthGain(end)}}
+  const last=Object.values(S.workouts).filter(x=>trained(x)&&x.date>=ws&&x.date<=end).sort((a,b)=>b.date.localeCompare(a.date)||(b.updated||0)-(a.updated||0))[0];
+  return {user_id:ME.user.id,week:ws,name:myName(),workouts:Math.min(14,w.workouts),protein_days:w.proteinDays,steps:Math.min(100000,w.steps),strength:strengthGain(end),
+    planned:plannedPerWeek(),last_workout:last?last.date:null,last_title:last?String(last.title||titleOf(last.prog)).slice(0,40):null}}
 async function publishBoard(){
   if(!SB||!ME.user||!S.loaded||!sharing()||needsIntake())return;
   const ws=weekStart(today()),rows=[boardRow(addDays(ws,-7)),boardRow(ws)],sig=JSON.stringify(rows);
   if(sig===S.boardSent)return;S.boardSent=sig;
-  try{const {error}=await SB.from('board').upsert(rows.map(r=>Object.assign({updated_at:new Date().toISOString()},r)),{onConflict:'user_id,week'});if(error)S.boardSent=null}catch(e){S.boardSent=null}
+  try{const {error}=await SB.from('board').upsert(rows.map(r=>Object.assign({updated_at:new Date().toISOString()},r)),{onConflict:'user_id,week'});if(error)S.boardSent=null;
+    // Keep your own rows on screen in step with what was just sent, without waiting for the next reload of the board.
+    else if(S.board){S.board=S.board.filter(r=>r.user_id!==ME.user.id).concat(rows);if(S.tab==='progress')softRender()}}catch(e){S.boardSent=null}
 }
 function queueBoard(){clearTimeout(queueBoard.t);queueBoard.t=setTimeout(publishBoard,3000)}
 async function loadBoard(){
   if(S.boardBusy)return;S.boardBusy=true;
-  try{await publishBoard();const {data,error}=await SB.from('board').select('user_id,week,name,workouts,protein_days,steps,strength').gte('week',addDays(weekStart(today()),-7));
+  try{await publishBoard();const {data,error}=await SB.from('board').select('user_id,week,name,workouts,protein_days,steps,strength,planned,last_workout,last_title').gte('week',addDays(weekStart(today()),-7));
     if(error)throw error;S.board=data||[];S.boardErr=null}catch(e){S.board=[];S.boardErr=true}
-  S.boardBusy=false;S.boardAt=Date.now();if(S.tab==='progress')softRender();
+  S.boardBusy=false;S.boardAt=Date.now();if(S.tab==='progress'||S.tab==='today')softRender();
 }
 async function setSharing(on){
   const s=clone(cfg());s.board=on;putSettings(s);S.board=null;S.boardSent=null;
   if(!on){try{await SB.from('board').delete().eq('user_id',ME.user.id)}catch(e){}}
   render();
 }
+// Loads the board if it hasn't been loaded in the last minute. Returns the rows (null while the first load runs).
+function boardRows(){if(!sharing()||!SB||!ME.user)return null;if(S.board==null||Date.now()-(S.boardAt||0)>60000)loadBoard();return S.board}
+// "Sam finished Push today": friends who trained today or yesterday.
+function buddyLine(){
+  const td=today(),yd=addDays(td,-1),rows=(boardRows()||[]).filter(r=>r.user_id!==ME.user.id&&(r.last_workout===td||r.last_workout===yd));
+  const seen=new Set(),out=[];
+  for(const r of rows.sort((a,b)=>b.last_workout.localeCompare(a.last_workout))){if(seen.has(r.user_id))continue;seen.add(r.user_id);out.push(`${esc(r.name)} finished ${esc(r.last_title||'a workout')} ${r.last_workout===td?'today':'yesterday'}`)}
+  return out.length?`<div class="buddy">${out.join(' · ')}</div>`:'';
+}
+// The shared goal: everyone finishes the workouts in their own plan that week.
+function teamGoal(rows,past){
+  const team=rows.filter(r=>r.planned>0);if(team.length<2)return '';
+  const hit=team.every(r=>r.workouts>=r.planned),left=team.reduce((a,r)=>a+Math.max(0,r.planned-r.workouts),0);
+  return `<div class="banner" style="margin:0 0 10px"><b>Team goal: everyone finishes their planned workouts</b><div>${team.map(r=>`${esc(r.name)} ${r.workouts}/${r.planned}${r.workouts>=r.planned?' ✓':''}`).join(' · ')}</div>
+    <div class="${hit?'good':past?'warn':'muted'}">${hit?'Hit ✓':past?'Missed last week.':`${left} workout${left===1?'':'s'} to go.`}</div></div>`;
+}
 function boardCard(){
   const head=`<div class="card"><h2>The board</h2>`;
   if(!sharing())return head+`<p class="muted" style="margin:0">You’re not on the board. Turn on sharing under your account (top right) to compare weekly totals with your friends.</p></div>`;
-  if(S.board==null||Date.now()-(S.boardAt||0)>60000)loadBoard();
+  boardRows();
   if(S.board==null)return head+`<div class="muted">Loading…</div></div>`;
   if(S.boardErr)return head+`<div class="muted">The board isn’t available right now.</div></div>`;
   const ws=weekStart(today()),wk=S.boardWeek==='last'?addDays(ws,-7):ws;
@@ -634,8 +708,8 @@ function boardCard(){
   const top=f=>Math.max(0,...rows.map(f)),cols=[['Workouts',r=>r.workouts,v=>v],['Protein days',r=>r.protein_days,v=>v],['Avg steps',r=>r.steps,v=>v?fmt(v):'–'],['Strength',r=>r.strength==null?-999:+r.strength,v=>v===-999?'–':(v>=0?'+':'')+v+'%']];
   const cell=([,f,show],r)=>{const v=f(r),lead=rows.length>1&&v>0&&v===top(f);return `<td>${lead?'<b class="good">':''}${show(v)}${lead?'</b>':''}</td>`};
   return head+`<div class="row" style="margin-bottom:8px"><button class="small ${wk===ws?'primary':''}" data-act="boardwk" data-v="this">This week</button><button class="small ${wk===ws?'':'primary'}" data-act="boardwk" data-v="last">Last week</button></div>
-    ${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
-    <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals are shared.</div></div>`;
+    ${teamGoal(rows,wk!==ws)}${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
+    <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals and the name of your latest session are shared.</div></div>`;
 }
 
 // ---------- toast ----------
@@ -708,10 +782,11 @@ function viewToday(){
   let h=`<div class="row between"><button data-act="day" data-v="-1">◀</button><b>${isToday?'Today · ':''}${nice(k)}</b><div class="row"><button data-act="day" data-v="1" ${isToday?'disabled style="visibility:hidden" aria-hidden="true"':''}>▶</button></div></div>`;
   if(!isToday)h+=`<div style="text-align:center"><button class="link" data-act="gotoday">Jump to today</button></div>`;
   h+=newPlanCard();
+  if(isToday&&checkinDue())h+=checkinCard(true);
   h+=hero(d,t);
   {const sk=streaks(),plan=plannedPerWeek(),wk=weekStats(weekStart(k));
    h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">${trainedDates().has(k)?'Open workout ✓':'Open workout'}</button>`}</div>
-    ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div></div>`}
+    ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div>${isToday?buddyLine():''}</div>`}
   const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
   h+=`<div class="card"><h2>Body & habits</h2><div class="grid2">
    ${fld('weight','Weight (lbs, morning)',(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})())}${fld('sleep','Sleep (hrs)','7.5')}
@@ -884,13 +959,13 @@ function viewWorkout(){
   if(w.done)h+=summary(w,id);
   const upNext=w.done?-1:w.ex.findIndex(e=>e.sets.some(s=>!s.d));
   w.ex.forEach((e,i)=>{
-    const last=lastFor(e.n,w.date,id),left=e.sets.filter(s=>!s.d).length;
+    const last=lastFor(e.n,w.date,id),left=e.sets.filter(s=>!s.d).length,stall=stallOf(liftHistory(e.n,w.date,id)),tg=targetFor(last,withJump(e,w.prog),stall);
     h+=`<div class="card ${i===upNext&&doneSets?'upnext':''} ${left?'':'exdone'}"><div class="row between"><div class="grow"><b>${e.ss?`<span class="tag">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:''}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(e.rest/60)}:${pad(e.rest%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
     {const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];const nt=(te&&te.n===e.n)?(te.note||''):e.note;if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`;}
     if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
-    h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,e,stallOf(liftHistory(e.n,w.date,id)))}</div>`;
-    h+=`<table class="sets"><tbody>`+e.sets.map((s,j)=>{const ls=last&&last.sets[Math.min(j,last.sets.length-1)];
-      return `<tr class="${s.d?'isdone':''}"><td>${j+1}</td><td><input type="number" inputmode="decimal" step="2.5" data-w="${i}" data-s="${j}" data-f="w" value="${s.w}" placeholder="${ls?(num(ls.w)??'lbs'):'lbs'}"></td><td><input type="number" inputmode="numeric" data-w="${i}" data-s="${j}" data-f="r" value="${s.r}" placeholder="${ls?ls.r:'reps'}"></td><td><button data-act="setdone" data-i="${i}" data-j="${j}">${s.d?'✓':'Done'}</button></td></tr>`}).join('')+`</tbody></table>
+    h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b><span class="muted"> · tap Done to log it</span></div>`:''}`;
+    h+=`<table class="sets"><tbody>`+e.sets.map((s,j)=>{const ls=tg&&tg[j];
+      return `<tr class="${s.d?'isdone':''}"><td>${j+1}</td><td><input type="number" inputmode="decimal" step="2.5" data-w="${i}" data-s="${j}" data-f="w" value="${s.w}" placeholder="${ls?(ls.w||'BW'):'lbs'}"></td><td><input type="number" inputmode="numeric" data-w="${i}" data-s="${j}" data-f="r" value="${s.r}" placeholder="${ls?ls.r:'reps'}"></td><td><button data-act="setdone" data-i="${i}" data-j="${j}">${s.d?'✓':'Done'}</button></td></tr>`}).join('')+`</tbody></table>
      <div class="row" style="margin-top:6px"><button class="small" data-act="setadd" data-i="${i}">+ Set</button><button class="small" data-act="setdel" data-i="${i}">− Set</button><button class="small" data-act="rest" data-v="${e.rest}">Rest timer</button></div></div>`;
   });
   if(S.addEx)h+=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Add exercise</h2><button class="small" data-act="axclose">Cancel</button></div><div class="grid3"><input id="axn" placeholder="Name" style="grid-column:1/4"><input id="axs" type="number" inputmode="numeric" value="3" placeholder="sets"><input id="axr" value="8-12" placeholder="reps (8-12)"><button class="primary" data-act="axadd">Add</button></div></div>`;
@@ -917,31 +992,110 @@ function weightSeries(){
   return {dots,avgp,start,end};
 }
 function win(endKey,n,f){const out=[];for(let i=0;i<n;i++){const d=S.days[addDays(endKey,-i)];if(!d)continue;const v=f(d);if(v!=null&&!isNaN(v))out.push(v)}return out}
+// Calories added to (or taken off) maintenance for each goal. Used by the intake and when switching phase.
+const GOAL_ADJ={bulk:250,cut:-400,maintain:0};
+// The 7-day average up to `end` against the 7 days before it, and what that means for the current goal.
+// Returns {A,B,ch,ok,text,adj}: adj is the calorie change to suggest (+150, −150 or 0).
+function weightTrend(end){
+  const wv=d=>num(d.weight),a=win(end,7,wv),b=win(addDays(end,-7),7,wv),A=avg(a),B=avg(b),g=goalOf();
+  const o={A,B,ch:null,ok:null,adj:0,text:'Weigh in at least 3 mornings a week (after the bathroom, before eating) to see your trend.'};
+  if(a.length<3||b.length<3)return o;
+  const ch=o.ch=A-B,say=(ok,text,adj=0)=>Object.assign(o,{ok,text,adj});
+  if(g==='cut'){const loss=-ch,lo=A*0.005,hi=A*0.01;
+    if(loss<lo*0.6)return say(false,`${ch>0?'Gaining':'Losing'} ${r1(Math.abs(ch))} lbs/wk. The target is ${r1(lo)}–${r1(hi)} lbs/wk. Eat about 150 cal less a day.`,-150);
+    if(loss>hi*1.25)return say(false,`Losing ${r1(loss)} lbs/wk. That’s too fast, so you’ll lose more muscle. Eat about 150 cal more a day.`,150);
+    return say(true,`Losing ${r1(loss)} lbs/wk. You’re on track.`)}
+  if(g==='maintain'){
+    if(ch>0.3)return say(false,`Up ${r1(ch)} lbs this week. Eat about 150 cal less a day if it keeps climbing.`,-150);
+    if(ch<-0.3)return say(false,`Down ${r1(-ch)} lbs this week. Eat about 150 cal more a day if it keeps dropping.`,150);
+    return say(true,`Weight is steady (${ch>=0?'+':''}${r1(ch)} lbs). You’re on track.`)}
+  if(ch<0.15)return say(false,`Gaining ${r1(ch)} lbs/wk. That’s below the 0.25–0.5 target. Add about 150 cal a day.`,150);
+  if(ch>0.6)return say(false,`Gaining ${r1(ch)} lbs/wk. That’s too fast, so more of it will be fat. Cut about 150 cal a day.`,-150);
+  return say(true,`Gaining ${r1(ch)} lbs/wk. You’re on track.`);
+}
+const trendText=tr=>tr.ok==null?tr.text:`<span class="${tr.ok?'good':'warn'}">${tr.text}</span>`;
+// One calorie change a week is enough: after you take it, the button turns into a note until next Sunday.
+function calButton(adj){
+  if(!adj)return '';
+  if(cfg().calAdj===weekStart(today()))return '<div class="muted">Calorie target changed this week ✓ Give it a week before changing it again.</div>';
+  return `<button class="small" data-act="adjcal" data-v="${adj}">${adj>0?'Raise':'Lower'} target to ${fmt(T().cal+adj)}</button>`;
+}
+
+// ---------- goal phases ----------
+// Pace in lbs/week over the last 3 weeks (steadier than one week), falling back to the last week.
+function pace(){
+  const td=today(),wv=d=>num(d.weight),now=win(td,7,wv),then=win(addDays(td,-21),7,wv);
+  if(now.length>=3&&then.length>=3)return (avg(now)-avg(then))/3;
+  return weightTrend(td).ch;
+}
+// "At this pace you reach 173 lbs around Feb 20", or '' when there's no goal to move toward or no clear pace.
+function etaText(){
+  const g=goalOf(),A=weightTrend(today()).A,goal=T().goal,rate=pace();
+  if(g==='maintain'||!A||rate==null)return '';
+  const gap=goal-A;if(g==='bulk'?gap<=0:gap>=0)return '';
+  if(Math.sign(rate)!==Math.sign(gap)||Math.abs(rate)<0.05)return '';
+  const wks=gap/rate;if(wks>78)return '';
+  return `At this pace you reach ${goal} lbs around ${parseKey(addDays(today(),Math.round(wks*7))).toLocaleDateString(undefined,{month:'short',day:'numeric'})}.`;
+}
+const goalReached=()=>{const g=goalOf(),A=weightTrend(today()).A,goal=T().goal;return !!A&&(g==='bulk'?A>=goal:g==='cut'?A<=goal:false)};
+// What can come next once the goal weight is reached, with targets worked out from the current ones.
+function nextPhases(){
+  const t=T(),A=Math.round(weightTrend(today()).A),g=goalOf(),maint=t.cal-GOAL_ADJ[g],r50=v=>Math.round(v/50)*50,pro=m=>Math.min(220,Math.round(A*m/5)*5);
+  if(g==='bulk')return [
+    {goal:'cut',label:'Start a mini-cut',why:'6–8 weeks to lean out, then bulk again.',cal:Math.max(1600,r50(maint+GOAL_ADJ.cut)),pro:pro(1),gw:Math.round(A*0.95)},
+    {goal:'bulk',label:'Keep bulking',why:'Stay on the same calories and aim higher.',cal:t.cal,pro:t.pro,gw:t.goal+5}];
+  return [
+    {goal:'maintain',label:'Hold this weight',why:'Eat at maintenance and keep getting stronger.',cal:r50(maint),pro:pro(0.9),gw:A},
+    {goal:'bulk',label:'Start a lean bulk',why:'Add muscle at 0.25–0.5 lb a week.',cal:r50(maint+GOAL_ADJ.bulk),pro:pro(0.9),gw:A+8}];
+}
+function phaseCard(){
+  if(!goalReached())return '';
+  return `<div class="card newplan"><h2>You reached ${T().goal} lbs</h2><p class="muted" style="margin-top:0">Pick what’s next. This changes your calorie, protein and goal-weight targets. Your program stays the same.</p>
+    ${nextPhases().map((p,i)=>`<div class="row between" style="margin-top:10px"><div class="grow"><b>${p.label}</b><div class="muted">${p.why} ${fmt(p.cal)} cal · ${p.pro} g protein · goal ${p.gw} lbs</div></div><button class="small ${i?'':'primary'}" data-act="phase" data-i="${i}">Choose</button></div>`).join('')}</div>`;
+}
+const phaseLine=()=>{const ps=cfg().phaseStart,wk=ps?Math.floor(daysBetween(ps,today())/7)+1:null;return GOALS[goalOf()]+(wk>0?` · week ${wk}`:'')};
+
+// ---------- weekly check-in ----------
+// New bests set and lifts stalled between two dates. Shared by the check-in and "Lifts this week".
+function liftsMoved(from,to){
+  const up=[],stuck=[];
+  for(const n of liftNames()){const hist=liftHistory(n,to),last=hist[hist.length-1];if(!last||last.date<addDays(to,-21))continue;
+    const top=bestOf(hist);
+    if(hist.length>1&&top.date>from)up.push(`${n} ${top.top}`);else if(stallOf(hist))stuck.push(n)}
+  return {up,stuck};
+}
+const lastWeek=()=>addDays(weekStart(today()),-7);
+const checkinDue=()=>{const w=weekStats(lastWeek());return cfg().checkin!==weekStart(today())&&(w.workouts>0||w.cal>0)};
+// Last week in one card: what happened, and the few things to change this week.
+function checkinCard(canDismiss){
+  const ws=lastWeek(),end=addDays(ws,6),w=weekStats(ws),plan=plannedPerWeek(),t=T(),tr=weightTrend(end),lm=liftsMoved(addDays(ws,-1),end);
+  const line=(ok,txt)=>`<li><span class="${ok?'good':'warn'}">${ok?'✓':'!'}</span> ${txt}</li>`,todo=[];
+  let h=`<div class="card ${canDismiss?'newplan':''}" id="checkin"><h2>Week check-in</h2><div class="muted">${short(ws)} – ${short(end)}</div><ul class="plain ticks">`;
+  h+=line(plan&&w.workouts>=plan,`${w.workouts} of ${plan||'–'} workouts`);
+  if(plan&&w.workouts<plan)todo.push(`Get all ${plan} workouts in. If a day keeps getting missed, move it under Plan.`);
+  if(w.cal){h+=line(w.proteinDays>=5,`Protein hit ${w.proteinDays} of 7 days · averaged ${fmt(w.cal)} cal`);
+    if(w.proteinDays<5)todo.push(`Hit ${t.pro} g protein at least 5 days. Get some at every meal and add a shake when you’re behind.`)}
+  else{h+=line(false,'No food logged');todo.push('Log your food most days, so the calorie advice is based on what you eat.')}
+  if(tr.ch!=null)h+=line(tr.ok,tr.text);
+  else todo.push('Weigh in at least 3 mornings, so the app can tell if your calories are right.');
+  if(lm.up.length)h+=line(true,`New bests: ${lm.up.map(esc).join(', ')}`);
+  if(lm.stuck.length){h+=line(false,`Stalled: ${lm.stuck.map(esc).join(', ')}`);todo.push('Stalled lifts have lighter targets next time. Hit the top of the rep range, then build back up.')}
+  if(w.steps)h+=line(w.steps>=STEP_GOAL,`${fmt(w.steps)} steps a day`);
+  h+=`</ul>`;
+  if(tr.adj||todo.length)h+=`<h3>This week</h3>${tr.adj?`<div style="margin-bottom:8px">${calButton(tr.adj)}</div>`:''}<ul class="plain">${todo.slice(0,3).map(x=>`<li>${x}</li>`).join('')}</ul>`;
+  else h+=`<p class="good" style="margin:8px 0 0">Everything’s on track. Keep doing what you’re doing.</p>`;
+  return h+`<div class="row" style="margin-top:10px"><button class="small ${canDismiss?'primary':''}" data-act="${canDismiss?'checkok':'checkhide'}">${canDismiss?'Got it':'Close'}</button></div></div>`;
+}
+
 function viewProgress(){
-  const t=T(),td=today();
-  const wv=d=>num(d.weight);
-  const a=win(td,7,wv),b=win(addDays(td,-7),7,wv);
-  const A=avg(a),B=avg(b);
-  let verdict='Weigh in at least 3 mornings a week (after the bathroom, before eating) to see your trend.';let adj='';
-  if(a.length>=3&&b.length>=3){const ch=A-B,g=goalOf();
-    const up=v=>`<button class="small" data-act="adjcal" data-v="150">Raise target to ${t.cal+150}</button>`,down=v=>`<button class="small" data-act="adjcal" data-v="-150">Lower target to ${t.cal-150}</button>`;
-    if(g==='cut'){const loss=-ch,lo=A*0.005,hi=A*0.01;
-      if(loss<lo*0.6){verdict=`<span class="warn">${ch>0?'Gaining':'Losing'} ${r1(Math.abs(ch))} lbs/wk. The target is ${r1(lo)}–${r1(hi)} lbs/wk. Eat about 150 cal less a day.</span>`;adj=down()}
-      else if(loss>hi*1.25){verdict=`<span class="warn">Losing ${r1(loss)} lbs/wk. That’s too fast, so you’ll lose more muscle. Eat about 150 cal more a day.</span>`;adj=up()}
-      else verdict=`<span class="good">Losing ${r1(loss)} lbs/wk. You’re on track.</span>`}
-    else if(g==='maintain'){
-      if(ch>0.3){verdict=`<span class="warn">Up ${r1(ch)} lbs this week. Eat about 150 cal less a day if it keeps climbing.</span>`;adj=down()}
-      else if(ch<-0.3){verdict=`<span class="warn">Down ${r1(-ch)} lbs this week. Eat about 150 cal more a day if it keeps dropping.</span>`;adj=up()}
-      else verdict=`<span class="good">Weight is steady (${ch>=0?'+':''}${r1(ch)} lbs). You’re on track.</span>`}
-    else{
-      if(ch<0.15){verdict=`<span class="warn">Gaining ${r1(ch)} lbs/wk. That’s below the 0.25–0.5 target. Add about 150 cal a day.</span>`;adj=up()}
-      else if(ch>0.6){verdict=`<span class="warn">Gaining ${r1(ch)} lbs/wk. That’s too fast, so more of it will be fat. Cut about 150 cal a day.</span>`;adj=down()}
-      else verdict=`<span class="good">Gaining ${r1(ch)} lbs/wk. You’re on track.</span>`}}
+  const t=T(),td=today(),wv=d=>num(d.weight);
+  const tr=weightTrend(td),A=tr.A,B=tr.B,verdict=trendText(tr),adj=calButton(tr.adj),eta=etaText();
   const ws=weightSeries();
   let h=`<div class="card"><h2>Bodyweight</h2><div class="kpis"><div class="kpi"><b>${A?r1(A):'–'}</b><span>7-day avg (lbs)</span></div><div class="kpi"><b>${A&&B?(A-B>=0?'+':'')+r1(A-B):'–'}</b><span>vs previous week</span></div></div>
-    <p style="margin:10px 0 6px">${verdict}</p>${adj}
+    <p style="margin:10px 0 6px">${verdict}</p>${adj}${eta?`<p class="muted" style="margin:8px 0 0">${eta}</p>`:''}
     ${chart([{pts:ws.dots,color:'var(--muted)',dots:true},{pts:ws.avgp,color:'var(--accent)'}],{goal:t.goal,xl:[short(ws.start),short(ws.end)]})}
     <div class="muted">Dots are daily weigh-ins and the line is the 7-day average. ${goalOf()==='bulk'?'The goal for this bulk is':'Your goal weight is'} ${t.goal} lbs.</div></div>`;
+  h=(S.showCheckin?checkinCard(false):`<button class="small" data-act="checkshow" style="margin:4px 0">Last week’s check-in</button>`)+h+phaseCard();
   // nutrition & habits (last 7 full days)
   const y=addDays(td,-1);const fd=[];for(let i=0;i<7;i++){const d=S.days[addDays(y,-i)];if(d&&(d.food||[]).length)fd.push(foodTotals(d))}
   const pHit=fd.filter(x=>x.p>=t.pro).length;
@@ -957,7 +1111,7 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
-  h+=liftsWeekCard(td)+boardCard();
+  h+=liftsWeekCard(td)+musclesCard(td)+boardCard();
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -983,13 +1137,35 @@ function viewProgress(){
 }
 // Which lifts set a new best in the last 7 days, and which have stalled.
 function liftsWeekCard(td){
-  const wk=addDays(td,-7),up=[],stuck=[];
-  for(const n of liftNames()){const hist=liftHistory(n),last=hist[hist.length-1];if(!last||last.date<addDays(td,-21))continue;
-    const top=bestOf(hist);
-    if(hist.length>1&&top.date>wk)up.push(`${n} ${top.top}`);else if(stallOf(hist))stuck.push(n)}
+  const {up,stuck}=liftsMoved(addDays(td,-7),td);
   if(!up.length&&!stuck.length)return '';
   return `<div class="card"><h2>Lifts this week</h2>${up.length?`<p style="margin:0 0 6px"><span class="good">New bests:</span> ${up.map(esc).join(', ')}</p>`:'<p class="muted" style="margin:0 0 6px">No new bests in the last 7 days.</p>'}
     ${stuck.length?`<p style="margin:0"><span class="warn">Stalled 2+ weeks:</span> ${stuck.map(esc).join(', ')}. Take about 10% off these and build back up.</p>`:''}</div>`;
+}
+// ---------- sets per muscle ----------
+// Hard sets per muscle in the 7 days up to `end`. A lift's main muscles count a full set, helpers half.
+function muscleSets(end){
+  const from=addDays(end,-7),out={};
+  for(const w of Object.values(S.workouts)){if(!w||w.date<=from||w.date>end)continue;
+    for(const e of w.ex||[]){const mm=musFor(e.n),n=setsDone(e).length;if(!mm||!n)continue;
+      mm.p.forEach(k=>{out[k]=(out[k]||0)+n});mm.s.forEach(k=>{out[k]=(out[k]||0)+n*0.5})}}
+  return out;
+}
+const SETS_LO=10,SETS_HI=20;
+const focusList=()=>Array.isArray(cfg().focus)?cfg().focus.filter(k=>MUS_NAME[k]):[];
+const mainLiftOf=k=>n=>{const mm=musFor(n);return !!mm&&mm.p.includes(k)};
+function musclesCard(td){
+  const sets=muscleSets(td),focus=focusList(),inPlan=new Set(Object.values(PROG().days).flatMap(d=>d.ex.flatMap(e=>(musFor(e.n)||{p:[]}).p)));
+  const keys=Object.keys(MUS_NAME).filter(k=>sets[k]||inPlan.has(k)||focus.includes(k));
+  if(!keys.length)return '';
+  keys.sort((a,b)=>focus.includes(b)-focus.includes(a)||(sets[b]||0)-(sets[a]||0));
+  const lv={};for(const k of keys){const v=sets[k]||0;lv[k]=v>=SETS_LO?3:v>=SETS_LO/2?2:v>0?1:0}
+  const row=k=>{const v=r1(sets[k]||0),f=focus.includes(k),g=f?strengthGain(td,mainLiftOf(k)):null;
+    return `<li><button class="link star ${f?'on':''}" data-act="focus" data-k="${k}" aria-pressed="${f}" aria-label="${f?'Remove':'Make'} ${MUS_NAME[k]} a focus">${f?'★':'☆'}</button><span class="grow">${MUS_NAME[k]}${g!=null?` <span class="muted">· lifts ${g>=0?'+':''}${g}%</span>`:''}</span><span class="${v<SETS_LO?'warn':v>SETS_HI?'warn':'good'}">${v} sets${v<SETS_LO?' · low':v>SETS_HI?' · a lot':''}</span></li>`};
+  const low=focus.filter(k=>(sets[k]||0)<SETS_LO).map(k=>MUS_NAME[k]);
+  return `<div class="card"><h2>Sets per muscle</h2><div class="muted">Last 7 days. Aim for about ${SETS_LO}–${SETS_HI} hard sets a week for the muscles you care about most. Tap ☆ to mark a focus.</div>
+    <div style="text-align:center;margin:10px 0 4px">${bodySVG(lv,'mfig-lg')}</div><ul class="mlist">${keys.map(row).join('')}</ul>
+    ${low.length?`<p class="warn" style="margin:8px 0 0">${low.join(' and ')} ${low.length>1?'are':'is'} a focus but under ${SETS_LO} sets. Add a few sets under Plan.</p>`:''}</div>`;
 }
 // Best set ever for each lift, newest record first.
 function recordsCard(names){
@@ -1072,7 +1248,7 @@ function viewProgramEditor(){
     h+=`<details class="pday" ${S.openDay===k?'open':''}><summary><b>${esc(d.t)}</b><span class="muted">${d.ex.length} exercise${d.ex.length===1?'':'s'}</span></summary>
       <label class="f" style="margin-top:8px">Day name<input data-pd="${esc(k)}" data-pf="t" value="${esc(d.t)}"></label>
       <ul class="list pex">${d.ex.map((e,i)=>`<li><div class="grow"><input data-pd="${esc(k)}" data-pe="${i}" data-pf="n" value="${esc(e.n)}" aria-label="Exercise name">
-        <div class="pnums"><label class="f">Sets<input type="number" inputmode="numeric" data-pd="${esc(k)}" data-pe="${i}" data-pf="s" value="${esc(e.s)}"></label><label class="f">Reps<input data-pd="${esc(k)}" data-pe="${i}" data-pf="r" value="${esc(e.r)}"></label><label class="f">Rest (sec)<input type="number" inputmode="numeric" data-pd="${esc(k)}" data-pe="${i}" data-pf="rest" value="${esc(e.rest)}"></label></div></div>
+        <div class="pnums"><label class="f">Sets<input type="number" inputmode="numeric" data-pd="${esc(k)}" data-pe="${i}" data-pf="s" value="${esc(e.s)}"></label><label class="f">Reps<input data-pd="${esc(k)}" data-pe="${i}" data-pf="r" value="${esc(e.r)}"></label><label class="f">Rest (sec)<input type="number" inputmode="numeric" data-pd="${esc(k)}" data-pe="${i}" data-pf="rest" value="${esc(e.rest)}"></label><label class="f">Jump (lbs)<input type="number" inputmode="decimal" step="2.5" data-pd="${esc(k)}" data-pe="${i}" data-pf="inc" value="${esc(e.inc??'')}" placeholder="${jumpFor(e)}"></label></div></div>
         <div class="pbtns"><button class="small" data-act="pexmv" data-k="${esc(k)}" data-i="${i}" data-v="-1" ${i?'':'disabled'} aria-label="Move up">↑</button><button class="small" data-act="pexmv" data-k="${esc(k)}" data-i="${i}" data-v="1" ${i<d.ex.length-1?'':'disabled'} aria-label="Move down">↓</button><button class="small qx" data-act="pexdel" data-k="${esc(k)}" data-i="${i}" aria-label="Remove">✕</button></div></li>`).join('')}</ul>
       <div class="row wrap" style="margin-top:8px"><button class="small" data-act="pexadd" data-k="${esc(k)}">+ Exercise</button><button class="small" data-act="pdaydel" data-k="${esc(k)}">${S.delDay===k?'Tap again to remove this day':'Remove day'}</button></div></details>`}
   h+=`<div class="row wrap" style="margin-top:10px"><button class="small" data-act="pdayadd">+ Add a day</button><button class="small" data-act="redo">Rebuild from questions</button></div></div>`;
@@ -1099,7 +1275,7 @@ function normPlan(raw){
     days[k]={t:String(d.t||k).slice(0,40),ex:d.ex.slice(0,15).map((e,i)=>{
       if(!e||!String(e.n||'').trim())throw `Day "${k}", exercise ${i+1} needs a name ("n").`;
       const o={n:String(e.n).trim().slice(0,60),s:Math.max(1,Math.min(10,Math.round(num(e.s)||3))),r:String(e.r||'8-12').slice(0,12),rest:Math.max(0,Math.min(600,Math.round(num(e.rest)||90)))};
-      if(e.ss)o.ss=String(e.ss).slice(0,3);if(e.note)o.note=String(e.note).slice(0,300);return o})};
+      if(num(e.inc)>0)o.inc=Math.min(50,num(e.inc));if(e.ss)o.ss=String(e.ss).slice(0,3);if(e.note)o.note=String(e.note).slice(0,300);return o})};
   }
   const keys=Object.keys(days);if(!keys.length)throw 'The program has no days.';if(keys.length>10)throw 'That’s more than 10 days.';
   const order=(Array.isArray(P.order)?P.order:[]).filter((k,i,a)=>days[k]&&a.indexOf(k)===i);for(const k of keys)if(!order.includes(k))order.push(k);
@@ -1138,6 +1314,7 @@ Rules
 - Double progression: when every set hits the top of the rep range, add weight.
 - Most sets 0–2 reps short of failure. Isolation can go to failure; a drop set on the last isolation set is fine. Heavy Smith lifts stay 1–2 reps short.
 - Rest 2–3 min on compounds, at least 90 s on isolation. Supersets can rest less between the paired moves.
+- Optional "inc" on an exercise is how many lbs to add when they hit the top of the rep range on every set. Leave it out for the defaults (10 on Smith lifts, 5 on everything else). Use 2.5 for small moves on machines that have add-on weights.
 - About 10–20 hard sets per muscle per week. Compounds first. No scheduled deloads.
 - Short notes only where they help (setup, what to log, when to go up).
 
@@ -1219,7 +1396,9 @@ function viewPlan(){
     <label class="f">Calories / day<input type="number" inputmode="numeric" data-set="cal" value="${t.cal}"></label>
     <label class="f">Protein (g) / day<input type="number" inputmode="numeric" data-set="pro" value="${t.pro}"></label>
     <label class="f">Goal weight (lbs)<input type="number" inputmode="decimal" data-set="goal" value="${t.goal}"></label>
-    <label class="f">Block start date<input type="date" data-set="block" value="${t.block||''}"></label></div>
+    <label class="f">Block start date<input type="date" data-set="block" value="${t.block||''}"></label>
+    <label class="f" style="grid-column:1/3">Goal<select id="goalsel">${Object.entries(GOALS).map(([v,l])=>`<option value="${v}" ${goalOf()===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label></div>
+    <div class="muted" style="margin-top:6px">${esc(phaseLine())}. Changing the goal changes the weekly advice, not your targets, so update those too.</div>
     <div class="row wrap" style="margin-top:8px"><button class="small" data-act="newblock">Start new 8-week block today</button><span class="muted">${bw?'Currently week '+bw+' of 8':'No block started'}</span></div>
     <ul class="plain muted" style="margin-top:8px">${goalNotes()}</ul></div>`;
   h+=newPlanCard()+viewProgramEditor();
@@ -1279,6 +1458,7 @@ app.addEventListener('input',e=>{
     else{const x=d.ex[+ds.pe];if(!x)return;
       if(ds.pf==='n'){if(x.n!==el.value){x.n=el.value;delete x.note}}
       else if(ds.pf==='r')x.r=el.value;
+      else if(ds.pf==='inc'){const v=num(el.value);if(v>0)x.inc=Math.min(50,v);else delete x.inc}
       else{const v=num(el.value);if(v==null)return;x[ds.pf]=ds.pf==='s'?Math.max(1,Math.min(10,Math.round(v))):Math.max(0,Math.min(600,Math.round(v)))}}
     putSettings(s,700);return}
   if(ds.sn!=null&&S.snap&&S.snap.items){const x=S.snap.items[+ds.sn];if(x){x[ds.sf]=ds.sf==='n'?el.value:(num(el.value)||0)}return}
@@ -1294,6 +1474,7 @@ app.addEventListener('change',e=>{
   if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;render()}}
   else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;render()}
   else if(el.id==='liftsel'){S.lift=el.value;render()}
+  else if(el.id==='goalsel'){const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:el.value});s.phaseStart=today();putSettings(s);render()}
   else if(ds.set){const s=clone(cfg());s[ds.set]=ds.set==='block'?(el.value||null):num(el.value);putSettings(s);render()}
   else if(ds.pre!=null&&ds.pf==='g')render();
 });
@@ -1342,9 +1523,11 @@ app.addEventListener('click',e=>{
     clearSnap();render()}
   else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=addFood(dayDoc(S.dk),{n,c,p});putDay(S.dk,d);render()}
   else if(act==='setdone'){const w=curWorkout(),ex=w.ex[i],s=ex.sets[+ds.j];
-    if(!s.d){const last=lastFor(ex.n,w.date,wid(w.date,w.prog));const ls=last&&last.sets[Math.min(+ds.j,last.sets.length-1)];
-      const prev=+ds.j>0?ex.sets[+ds.j-1]:null;const src=(prev&&prev.d)?prev:ls;
-      if(s.w===''&&src&&num(src.w)!=null)s.w=num(src.w);if(s.r===''&&src)s.r=num(src.r);
+    if(!s.d){const id=wid(w.date,w.prog),tg=targetFor(lastFor(ex.n,w.date,id),withJump(ex,w.prog),stallOf(liftHistory(ex.n,w.date,id))),t=tg&&tg[+ds.j];
+      // Blank fields fill from today's target. If you already changed the weight on the set before, keep using that.
+      const prev=+ds.j>0?ex.sets[+ds.j-1]:null,pw=prev&&prev.d&&num(prev.w)!=null?num(prev.w):null;
+      if(s.w===''){if(pw!=null)s.w=pw;else if(t&&t.w)s.w=t.w}
+      if(s.r===''){if(t)s.r=t.r;else if(prev&&prev.d)s.r=num(prev.r)}
       if(s.r===''){const inp=app.querySelector(`input[data-w="${i}"][data-s="${ds.j}"][data-f="r"]`);inp&&inp.focus();return}
       s.d=true;if(!w.t0)w.t0=Date.now();
       const b=bestSet({sets:[s]}),before=bestSet({sets:ex.sets.filter(x=>x!==s)});
@@ -1374,7 +1557,11 @@ app.addEventListener('click',e=>{
   else if(act==='cp'){Promise.resolve().then(()=>navigator.clipboard.writeText(ds.cp)).then(()=>toast('Copied'),()=>toast('Press and hold the text to copy it'))}
   else if(act==='boardwk'){S.boardWeek=ds.v;render()}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
-  else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);putSettings(s);render()}
+  else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);s.calAdj=weekStart(today());putSettings(s);render()}
+  else if(act==='focus'){const s=clone(cfg()),f=focusList();s.focus=f.includes(ds.k)?f.filter(k=>k!==ds.k):[...f,ds.k];putSettings(s);render()}
+  else if(act==='checkok'){const s=clone(cfg());s.checkin=weekStart(today());putSettings(s);render()}
+  else if(act==='checkshow'||act==='checkhide'){S.showCheckin=act==='checkshow';render()}
+  else if(act==='phase'){const p=nextPhases()[i];if(!p||!goalReached())return;const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:p.goal});s.cal=p.cal;s.pro=p.pro;s.goal=p.gw;s.phaseStart=today();putSettings(s);toast(p.label+': targets updated');render()}
   else if(act==='newblock'){const s=clone(cfg());s.block=today();putSettings(s);render()}
   else if(act==='preadd'){const s=clone(cfg());const ps=clone(presets());ps.push({g:'Snacks',n:'New food',c:100,p:10});s.presets=ps;putSettings(s);render()}
   else if(act==='predel'){const s=clone(cfg());const ps=clone(presets());ps.splice(i,1);s.presets=ps;putSettings(s);render()}
@@ -1402,7 +1589,8 @@ const SB=(window.supabase&&CFG.url&&CFG.key)?window.supabase.createClient(CFG.ur
 const AUTH_HASH=location.hash||'';
 const NEEDS_PW=/type=(invite|recovery)/.test(AUTH_HASH);
 const ME={user:null,profile:null};
-function dbErr(e){const st=e&&(e.status||e.code);if(st===401||st==='401'||st==='PGRST301'||st==='42501')return {code:'invalid_argument',message:String(e.message||e)};return {code:'unavailable',message:String((e&&e.message)||e)}}
+function dbErr(e){const st=e&&(e.status||e.code);if(st===401||st==='401'||st==='PGRST301'||st==='42501')return {code:'invalid_argument',message:String(e.message||e)};
+  const msg=String((e&&e.message)||e);return {code:navigator.onLine===false||/failed to fetch|networkerror|load failed|network request failed/i.test(msg)?'offline':'unavailable',message:msg}}
 function makeDb(uid){
   const L={days:[],workouts:[],settings:[]},timers={};
   const snapOf=rows=>{const docs=rows.map(r=>({id:r.id,exists:true,data:()=>r.data,metadata:{fromCache:false,hasPendingWrites:false}}));return {docs,size:docs.length,empty:!docs.length,metadata:{fromCache:false,hasPendingWrites:false},docChanges:()=>[]}};
@@ -1437,12 +1625,12 @@ function accountUI(){
    <label class="f" style="margin-top:12px">New password<input id="acpw" type="password" autocomplete="new-password" placeholder="at least 8 characters"></label>
    <div class="row" style="margin-top:8px"><button class="small" data-act="pwchange">Change password</button><span class="muted">${esc(S.pwMsg||'')}</span></div>
    <label class="check" style="margin-top:14px"><input type="checkbox" id="acboard" ${sharing()?'checked':''}> Show me on the board</label>
-   <div class="muted" style="margin-top:4px">Shares four weekly totals with the other people on this app: workouts, protein days, average steps and strength change. Never your food, weight or lifts.</div>
+   <div class="muted" style="margin-top:4px">Shares weekly totals with the other people on this app: workouts done and planned, protein days, average steps, strength change, and the name and day of your latest session. Never your food, weight or lifts.</div>
    <button class="small" data-act="signout" style="margin-top:14px">Sign out</button></div>`;
 }
 async function saveName(){const v=($('#acname').value||'').trim().slice(0,40);const {error}=await SB.from('profiles').update({display_name:v}).eq('id',ME.user.id);S.nameMsg=error?'Couldn’t save the name.':'Saved ✓';if(!error&&ME.profile)ME.profile.display_name=v;render()}
 async function changePassword(){const v=$('#acpw').value||'';if(v.length<8){S.pwMsg='Use at least 8 characters.';return render()}const {error}=await SB.auth.updateUser({password:v});S.pwMsg=error?(error.message||'Couldn’t change it.'):'Password changed ✓';render()}
-async function signOut(){flushAll();await sleep(300);try{await SB.auth.signOut()}catch(e){}location.replace(location.pathname)}
+async function signOut(){flushAll();await sleep(300);forgetCopy();try{await SB.auth.signOut()}catch(e){}location.replace(location.pathname)}
 
 // ---------- automatic steps (an iOS Shortcut posts to log_steps with a personal token) ----------
 async function loadStepLink(){try{const {data}=await SB.from('step_tokens').select('created_at,last_used').maybeSingle();S.stepLink=data||false}catch(e){S.stepLink=false}if(S.tab==='account')softRender()}
@@ -1510,25 +1698,31 @@ function authScreen(mode,msg){
 
 // ---------- load ----------
 function applySnap(snap,col,map){let ch=false;for(const d of snap.docs){S.known[col+'/'+d.id]=true;if(pending[col+'/'+d.id])continue;const s=JSON.stringify(d.data());if(JSON.stringify(map[d.id])!==s){map[d.id]=JSON.parse(s);ch=true}}return ch}
-function onErr(e){S.note='Lost the connection to your saved data. It will retry when the app comes back into view.';setStatus('Offline');render()}
+function onErr(e){if(S.loaded&&e&&e.code==='offline'){setStatus(Object.keys(pending).length?OFFLINE_SAVED:'Offline');return}S.note='Lost the connection to your saved data. It will retry when the app comes back into view.';setStatus('Offline');render()}
 let STARTED=false;
 async function start(){
   if(STARTED)return;
-  const {data:{session}}=await SB.auth.getSession();
-  if(!session){S.boot=false;return authScreen('login')}
+  let session=null,netErr=false;
+  try{const r=await SB.auth.getSession();session=r.data&&r.data.session;netErr=!!r.error&&/fetch|network/i.test((r.error.name||'')+(r.error.message||''))}catch(e){netErr=true}
+  // With no signal the sign-in can't be refreshed. If this phone was signed in, open its saved copy; nothing sends until it's back online.
+  const user=session?session.user:((navigator.onLine===false||netErr)?LS.get('gj_last'):null);
+  if(!user){S.boot=false;return authScreen('login')}
   if(NEEDS_PW&&!S.pwDone){S.pwDone=true;return authScreen('setpw')}
   STARTED=true;
   document.body.classList.remove('signedout');$('#auth').innerHTML='';
-  ME.user=session.user;
-  try{const {data}=await SB.from('profiles').select('display_name,is_admin').eq('id',ME.user.id).maybeSingle();ME.profile=data||null}catch(e){}
+  ME.user=user;LS.set('gj_last',{id:user.id,email:user.email});
   S.sample=null;S.boot=false;
-  const db=makeDb(ME.user.id);S.db=db;render();
+  const db=makeDb(ME.user.id);S.db=db;
+  if(openCopy())setStatus(navigator.onLine===false?'Offline':'Syncing…');
+  render();
+  SB.from('profiles').select('display_name,is_admin').eq('id',ME.user.id).maybeSingle().then(({data})=>{if(data){ME.profile=data;keepCopy();meBadge()}},()=>{});
   const timer=setTimeout(()=>{if(!S.loaded){S.timedOut=true;S.note='Still connecting, so some saved data may be missing. Check your connection; it will fill in once it connects.';setStatus('Connecting…');render()}},10000);
-  const got=k=>{S.ready[k]=true;if(!S.loaded&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;setStatus('Saved ✓');render();checkPlan();queueBoard();return true}return false};
+  const got=k=>{S.ready[k]=true;keepCopy();if(!S.synced&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.synced=S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;if(!Object.keys(pending).length)setStatus('Saved ✓');keepCopy();render();checkPlan();queueBoard();return true}return false};
   db.collection('days').onSnapshot(s=>{const ch=applySnap(s,'days',S.days);if(!got('days')&&ch)softRender()},onErr);
   db.collection('workouts').onSnapshot(s=>{const ch=applySnap(s,'workouts',S.workouts);if(!got('workouts')&&ch)softRender()},onErr);
   db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.known['settings/main']=true;let ch=false;if(!pending['settings/main']){const v=s.exists?s.data():{};if(JSON.stringify(v)!==JSON.stringify(S.settings)){S.settings=clone(v);ch=true}}if(!got('settings')&&ch)softRender()},onErr);
 }
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
 render();
 if(!SB){S.boot=false;S.note='App isn’t configured: check config.js.';render()}
 else{

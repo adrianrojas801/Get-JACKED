@@ -4,6 +4,7 @@ app:
   - changed-files:
       - any-glob-to-any-file:
           - index.html
+          - sw.js
           - config.js
           - vendor/**
           - manifest.webmanifest
