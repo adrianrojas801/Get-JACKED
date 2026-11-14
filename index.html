@@ -63,6 +63,9 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:.65}
 input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{-webkit-text-fill-color:var(--text);caret-color:var(--text);-webkit-box-shadow:0 0 0 1000px var(--field) inset;box-shadow:0 0 0 1000px var(--field) inset;transition:background-color 99999s ease-out 0s}
 input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 1000px var(--card) inset,0 0 0 3px var(--accent-soft);box-shadow:0 0 0 1000px var(--card) inset,0 0 0 3px var(--accent-soft)}
 input:autofill{background:var(--field);color:var(--text)}
+/* Chrome on iPhone fills sign-in fields by setting an inline light-blue background (#E8F0FE), which beats normal CSS. !important wins over it. */
+#auth input,input[type=email],input[type=password],input[autocomplete]{background-color:var(--field)!important;color:var(--text)!important;-webkit-text-fill-color:var(--text)}
+#auth input:focus,input[type=email]:focus,input[type=password]:focus,input[autocomplete]:focus{background-color:var(--card)!important}
 textarea{min-height:64px;resize:vertical}
 input[type=date],select{height:42px;line-height:normal;display:block}
 input[type=date]{-webkit-appearance:none;appearance:none;text-align:left}
