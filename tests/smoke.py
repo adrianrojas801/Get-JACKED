@@ -97,6 +97,9 @@ async def main():
               == '[["uchest","sdelt"],["sdelt","biceps","triceps","lats","uback"],[]]', "Focus words map to the right muscles")
         check(await page.is_visible("#nav") and "Your plan is ready" in await page.inner_text("#app"),
               "Tabs come back after the intake")
+        first = (await page.inner_text("#firststeps")).lower()
+        check("getting set up" in first and "0 of 4 done" in first and "log a workout" in first and await page.locator("#firststeps .eyebrow").count() == 1,
+              "A new person gets a short checklist in the coach style")
 
         await page.click("button[data-act=quick]")
         await page.click("button[data-act=foods]"); await page.wait_for_timeout(400)
@@ -172,6 +175,23 @@ async def main():
         for tab in ["today", "workout", "progress", "plan"]:
             await page.click(f"nav button[data-tab={tab}]"); await page.wait_for_timeout(150)
         check(True, "All four tabs open")
+        # A new person sees only what has something in it.
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(200)
+        body = (await page.inner_text("#app")).lower()
+        check("bodyweight" in body and "waist" not in body and "measurements" not in body and "progress photos" in body
+              and await page.locator("#app .seg").count() == 1, "Progress leaves out Waist and Measurements until they have data, and Photos is one line")
+        await page.click(".ibtn[data-id=bw]"); await page.wait_for_timeout(150)
+        check("dots are daily weigh-ins" not in body and "dots are daily weigh-ins" in (await page.inner_text("#app")).lower(),
+              "Explanations stay behind the (i) button until it's tapped")
+        await page.click("button[data-act=psec][data-v=friends]"); await page.wait_for_timeout(700)
+        friends = (await page.inner_text("#app")).lower()
+        check("only one here so far" in friends and "head to head" not in friends and await page.locator("table.board").count() == 0,
+              "Friends is one line until someone else has logged")
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(200)
+        left = (await page.inner_text("#firststeps")).lower()
+        await page.click("button[data-act=welcomed]"); await page.wait_for_timeout(300)
+        check("of 4 done" in left and "0 of 4" not in left and await page.locator("#firststeps").count() == 0 and (await settings(page)).get("welcomed") is True,
+              "The checklist tracks what's done and can be hidden")
         await page.context.close()
 
         # ---- Pablo, from before per-person programs ----
@@ -332,6 +352,7 @@ async def main():
         app = (await page.inner_text("#app")).lower()
         check("records" in app and "lifts this week" in app and "125×10" in app, "Lifts shows records and this week's lifts")
         check("sets per muscle" in app and "lats" in app, "Lifts shows weekly sets per muscle")
+        check(await page.locator("#firststeps").count() == 0, "Someone who has done the basics never sees the checklist")
         await page.click("svg.mfig-xl path[data-mus=lats]"); await page.wait_for_timeout(200)
         app2 = (await page.inner_text("#app")).lower()
         check("this week: lat pulldown" in app2 and "in your plan: lat pulldown" in app2 and await page.locator("path.msel").count() == 2,

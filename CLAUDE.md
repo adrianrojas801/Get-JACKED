@@ -66,6 +66,11 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Measurements and photos:** tape measurements are fields on the day doc (`MEAS`). Progress photos are files in the private `progress` storage bucket under `<user id>/<date>_<pose>_<time>.jpg`, shrunk in the browser by `shrinkImage()`.
 - **Head to head:** `weekScore()` scores one week's board rows with the categories in `H2H`. It reads the board; it must not need anything the board doesn't already share.
 - **Optional server features:** photo estimates (`probeEstimates()` → `edgeSampler()` → the `food-estimate` function) and reminders (`remindersCard()`, `push_subs`, the `send-reminders` function, the `push` handler in `sw.js`). Both stay hidden until configured: estimates until the function answers `{ready:true}`, reminders until `config.js` has `vapidPublicKey`. Keep them hidden-by-default; never show a button that can't work.
+- **Design rules:**
+  - Advice always uses the coach style: build it with `coachOpen(title)` (check-in, suggestions, phase change, new program, the setup checklist). Don't invent another highlighted card.
+  - Keep cards to numbers and actions. Put the explanation behind the (i) button with `titled(id, title, text)`.
+  - A section with nothing in it yet is left out or shrunk to one line (Waist, Measurements, Last 7 days, Lifts, the board, head to head, Photos). When you add a card, decide what it does with no data.
+  - `firstStepsCard()` is the only onboarding: a checklist on Today that disappears when the basics are done or on Hide (`settings.welcomed`).
 - **Writes:** `set` means a full upsert. `update` means the `patch_doc` RPC (a top-level `jsonb ||` merge). Field-level edits must use the patch path so two devices don't overwrite each other.
 - **Save pipeline:** `save()` / `flush()` / `pending{}` writes taps instantly, debounces typing by about 700 ms, writes one document at a time, retries once on `unavailable`, flushes on `pagehide`/`visibilitychange`, and shows "Not saved yet…" after 5 seconds. Snapshots for docs with pending writes are skipped. Don't regress any of this.
 - **Loading:** show "Loading your data…" until days, workouts and settings have all arrived. Never render an empty Today screen that looks like lost data.
