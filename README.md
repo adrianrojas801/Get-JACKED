@@ -15,7 +15,7 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 ### Data model
 
 - `profiles`: one row per person (`display_name`, `is_admin`). People can rename themselves but can't make themselves admin. An admin can see the list of names, but **never** anyone else's logs.
-- `docs`: each person's tracker data, keyed by `(user_id, coll, id)`, where `coll` is `days`, `workouts` or `settings`. The RLS policy only allows `user_id = auth.uid()`.
+- `docs`: each person's tracker data, keyed by `(user_id, coll, id)`, where `coll` is `days`, `workouts` or `settings`. The RLS policy only allows `user_id = auth.uid()`. Each person's workout program, targets and quick-add foods live in their own `settings` doc.
 - `patch_doc(coll, id, patch)`: merges changed fields into a doc so two devices don't overwrite each other's edits.
 
 ## How deploys work
@@ -40,7 +40,7 @@ To change the database, add a new file to `supabase/migrations/` named `YYYYMMDD
 
 ## Adding a person
 
-Authentication → Users → Add user → Create new user (with Auto Confirm checked). Send them the link and their temporary password, and have them change it under Plan → Account.
+Authentication → Users → Add user → Create new user (with Auto Confirm checked). Send them the link and their temporary password, and have them change it under Plan → Account. The first time they sign in, a short set of questions builds their workout program and daily targets. They can edit both later under Plan.
 
 ## Moving data in
 

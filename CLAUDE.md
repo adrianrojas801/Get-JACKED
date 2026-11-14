@@ -44,6 +44,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 
 - **Single-file app, no framework, no build step.** Don't add a bundler, framework or npm dependencies unless the owner asks. External network calls go only to Supabase.
 - **Data adapter:** `makeDb(uid)` in `index.html` makes Supabase look like the document store the UI was written for: `doc(path).get/set/update/onSnapshot` and `collection(name).onSnapshot`. Paths are `days/<YYYY-MM-DD>`, `workouts/<date>_<prog>` and `settings/main`. Keep the UI talking to this interface, not to Supabase directly.
+- **Per-person programs:** each person's program lives in `settings/main` as `program = {days:{key:{t, ex:[{n,s,r,rest,ss?,note?}]}}, order, sched}` (`sched` is Sun–Sat, a day key or `'rest'`). Read it through `PROG()`, `dayOf()`, `titleOf()` and `schedOn()`, never a hard-coded program. New people get one from the intake form (`calcTargets` + `buildProgram`). `LEGACY_PROGRAM` is the owner's original program and is only used once by `ensureProgram()` to move him over (`settings.legacy = true` keeps his personal notes, food groups and cheat sheet). Never show legacy-only content to anyone else.
 - **Writes:** `set` means a full upsert. `update` means the `patch_doc` RPC (a top-level `jsonb ||` merge). Field-level edits must use the patch path so two devices don't overwrite each other.
 - **Save pipeline:** `save()` / `flush()` / `pending{}` writes taps instantly, debounces typing by about 700 ms, writes one document at a time, retries once on `unavailable`, flushes on `pagehide`/`visibilitychange`, and shows "Not saved yet…" after 5 seconds. Snapshots for docs with pending writes are skipped. Don't regress any of this.
 - **Loading:** show "Loading your data…" until days, workouts and settings have all arrived. Never render an empty Today screen that looks like lost data.
@@ -88,7 +89,12 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 - **Effort:** most sets 0–2 reps short of failure. Isolation exercises can go to failure, and a drop set on the last set of an isolation exercise is fine. Heavy Smith lifts stay 1–2 reps short of failure.
 - **Rest:** 2–3 minutes on compounds, at least 90 seconds on isolation. Rests inside a superset can be shorter.
 - **No scheduled deloads.** Suggest an easier week only after a stall of 2+ weeks or when the person feels beat up.
-- **Lean bulk:** aim for 0.25–0.5 lb a week on the 7-day weight average. Suggest calorie changes in ±150 steps. Protein target about 160 g. Track waist growth against weight gain.
+- **Goals** (from the intake, `settings.profile.goal`). Suggest calorie changes in ±150 steps for all of them.
+  - **Lean bulk:** aim for 0.25–0.5 lb a week on the 7-day weight average. Track waist growth against weight gain. (The owner's protein target is about 160 g.)
+  - **Cut:** lose about 0.5–1% of body weight a week. Protein about 1 g per lb. Keep lifting heavy.
+  - **Maintain:** keep the 7-day average within about a pound of the start.
+- **Intake targets:** Mifflin-St Jeor × activity (1.4 / 1.55 / 1.75, which already counts the lifting), then +250 bulk, −400 cut, 0 maintain, rounded to 50, with a floor of 1,600 (men) / 1,300 (women). Protein 0.9 g/lb (1 g/lb on a cut), capped at 220 g.
+- **Generated programs:** 3 days = full body A/B/C, 4 = upper/lower ×2, 5 = upper, lower, push, pull, legs, 6 = push/pull/legs ×2. Compounds first, about 10–20 sets per muscle a week. People lifting under a year get at most 3 sets per exercise and 7 exercises per day.
 - **Gym:** Planet Fitness (Smith machine, cable crossover, hack squat, dumbbells, machines). There's no free barbell rack, so suggest exercises that exist there.
 - **Units:** pounds, inches, US formats.
 
@@ -99,6 +105,6 @@ Plain, direct, short sentences. No hype or filler. Spell out what the user shoul
 ## Planned work (for context)
 
 1. Photo food estimates through a Supabase Edge Function that holds the Anthropic key (per-user daily limit, a monthly spending limit set in the Console)
-2. Per-user workout programs stored in `settings`, plus an intake form for new users
+2. ~~Per-user workout programs stored in `settings`, plus an intake form for new users~~ (done)
 3. A leaderboard from a shared summary table (steps, protein days, workouts, strength percentage gains)
 4. Steps sent automatically from an iOS Shortcut to a dedicated endpoint

@@ -1,6 +1,7 @@
 // Fake supabase-js used by tests/smoke.py. Served in place of vendor/supabase.js.
-// Stores docs in window.__docs and accepts one password: pw12345678.
-window.__docs={};window.__calls=[];
+// Stores docs in window.__docs (kept in sessionStorage so they survive a reload) and accepts one password: pw12345678.
+window.__docs=JSON.parse(sessionStorage.getItem('mockdocs')||'{}');window.__calls=[];
+const persist=()=>sessionStorage.setItem('mockdocs',JSON.stringify(__docs));
 window.supabase={createClient(){
   let session=JSON.parse(localStorage.getItem('mocksess')||'null');
   const key=(c,i)=>c+'/'+i;
@@ -18,7 +19,7 @@ window.supabase={createClient(){
       __calls.push([table,mode]);
       if(!session)return {data:null,error:{status:401,message:'no auth'}};
       if(table==='profiles'){if(mode==='update')return {error:null};return {data:{display_name:'pablo',is_admin:true},error:null}}
-      if(mode==='upsert'){for(const r of payload)__docs[key(r.coll,r.id)]=JSON.parse(JSON.stringify(r.data));return {error:null}}
+      if(mode==='upsert'){for(const r of payload)__docs[key(r.coll,r.id)]=JSON.parse(JSON.stringify(r.data));persist();return {error:null}}
       const rows=Object.entries(__docs).filter(([k])=>!f.coll||k.startsWith(f.coll+'/')).map(([k,d])=>({id:k.split('/')[1],data:d})).filter(r=>!f.id||r.id===f.id);
       if(single)return {data:rows[0]||null,error:null};
       return {data:rows,error:null};
@@ -34,7 +35,7 @@ window.supabase={createClient(){
       updateUser:async()=>({error:null}),resetPasswordForEmail:async()=>({error:null})
     },
     from:qb,
-    rpc:async(n,a)=>{__calls.push(['rpc',n]);const k=key(a.p_coll,a.p_id);__docs[k]=Object.assign(__docs[k]||{},JSON.parse(JSON.stringify(a.p_patch)));return {error:null}},
+    rpc:async(n,a)=>{__calls.push(['rpc',n]);const k=key(a.p_coll,a.p_id);__docs[k]=Object.assign(__docs[k]||{},JSON.parse(JSON.stringify(a.p_patch)));persist();return {error:null}},
     channel(){const c={on(){return c},subscribe(){return c}};return c}
   };
 }};
