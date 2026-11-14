@@ -130,13 +130,6 @@ body.sheeton{overflow:hidden}body.sheeton #timer{display:none}
 .check input{width:22px;height:22px;flex:none;-webkit-appearance:none;appearance:none;padding:0;margin:0;border:2px solid var(--accent);border-radius:7px;background:var(--accent-soft);display:grid;place-content:center;cursor:pointer;box-shadow:none}
 .check input:checked{background:var(--good);border-color:var(--good)}
 .check input:checked::after{content:'';width:6px;height:11px;border:solid var(--card);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
-.sets{width:100%;border-collapse:separate;border-spacing:0 6px;margin-top:4px}
-.sets td{padding:0 3px}
-.sets td:first-child{width:26px;color:var(--muted);font-size:13px;text-align:center;font-weight:600}
-.sets td:last-child{width:58px}
-.sets button{width:100%;padding:9px 0}
-.sets tr.isdone input{border-color:var(--good);background:var(--accent-soft)}
-.sets tr.isdone button{background:var(--good);border-color:var(--good);color:var(--card)}
 .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--accent-soft);color:var(--accent);margin-right:6px;vertical-align:middle}
 .hint{font-size:13px;margin-top:4px}
 .banner{padding:12px 14px;border-radius:12px;background:var(--accent-soft);font-size:14px;margin:12px 0}
@@ -231,8 +224,28 @@ body.signedout main,body.signedout nav,body.signedout #timer,body.signedout #sta
 #app .err{color:var(--bad);font-size:13px;min-height:1em;margin-top:8px}
 body.setup #nav{display:none}
 .intake-rest{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-.card.upnext{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+.card.exopen{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow);scroll-margin-top:84px}
 .card.exdone>.row.between>.grow>b::after{content:' ✓';color:var(--good)}
+button.exrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 16px;margin:8px 0;font-weight:400}
+.exrow .grow{display:flex;flex-direction:column;gap:2px}
+.exrow b{font-family:var(--display);font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:.025em;line-height:1.1}
+.excount{font-weight:700;font-size:14px;color:var(--muted);white-space:nowrap}.exrow.exdone .excount{color:var(--good)}
+.setlist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.setrow{display:grid;grid-template-columns:26px 1fr 1fr 58px;gap:6px;align-items:center}
+.setrow>span{color:var(--muted);font-size:13px;text-align:center;font-weight:600}
+.setrow button{padding:9px 0}
+.setrow.isdone input{border-color:var(--good);background:var(--accent-soft)}
+.setrow.isdone button{background:var(--good);border-color:var(--good);color:var(--card)}
+.setnow{background:var(--field);border:1px solid var(--line);border-radius:14px;padding:12px}
+.setlabel{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px}
+.stps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stp{display:grid;grid-template-columns:38px 1fr 38px;align-items:center;gap:3px}
+.stp>button{height:48px;padding:0;font-size:22px;font-weight:600;border-radius:12px;background:var(--card)}
+.stp label{display:flex;flex-direction:column;align-items:center;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.stp input{text-align:center;border:none;background:transparent;padding:0;font-family:var(--display);font-size:26px;font-weight:800;height:32px;letter-spacing:0;-moz-appearance:textfield;box-shadow:none}
+.stp input:focus{background:transparent;box-shadow:none}
+.stp input::-webkit-outer-spin-button,.stp input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+button.big{width:100%;margin-top:12px;padding:15px;font-size:16px;border-radius:14px}
 ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inline-block;width:18px;font-weight:700}
 .mlist li{align-items:center}.mlist .grow{flex:1}.mlist li>span:last-child{white-space:nowrap}
 button.star{font-size:17px;padding:0 6px 0 0;color:var(--muted);line-height:1}button.star.on{color:var(--accent)}
@@ -998,24 +1011,45 @@ function viewWorkout(){
     return h;
   }
   h+=`<div style="margin:0 4px">${bar(doneSets,allSets||1)}</div>`;
-  h+=sessionFig(w);
   if(w.done)h+=summary(w,id);
-  const upNext=w.done?-1:w.ex.findIndex(e=>e.sets.some(s=>!s.d));
-  w.ex.forEach((e,i)=>{
-    const last=lastFor(e.n,w.date,id),left=e.sets.filter(s=>!s.d).length,stall=stallOf(liftHistory(e.n,w.date,id)),tg=targetFor(last,withJump(e,w.prog),stall);
-    h+=`<div class="card ${i===upNext&&doneSets?'upnext':''} ${left?'':'exdone'}"><div class="row between"><div class="grow"><b>${e.ss?`<span class="tag">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:''}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(e.rest/60)}:${pad(e.rest%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
-    {const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];const nt=(te&&te.n===e.n)?(te.note||''):e.note;if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`;}
-    if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
-    h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b><span class="muted"> · tap Done to log it</span></div>`:''}`;
-    h+=`<table class="sets"><tbody>`+e.sets.map((s,j)=>{const ls=tg&&tg[j];
-      return `<tr class="${s.d?'isdone':''}"><td>${j+1}</td><td><input type="number" inputmode="decimal" step="2.5" data-w="${i}" data-s="${j}" data-f="w" value="${s.w}" placeholder="${ls?(ls.w||'BW'):'lbs'}"></td><td><input type="number" inputmode="numeric" data-w="${i}" data-s="${j}" data-f="r" value="${s.r}" placeholder="${ls?ls.r:'reps'}"></td><td><button data-act="setdone" data-i="${i}" data-j="${j}">${s.d?'✓':'Done'}</button></td></tr>`}).join('')+`</tbody></table>
-     <div class="row" style="margin-top:6px"><button class="small" data-act="setadd" data-i="${i}">+ Set</button><button class="small" data-act="setdel" data-i="${i}">− Set</button><button class="small" data-act="rest" data-v="${e.rest}">Rest timer</button></div></div>`;
-  });
+  // One exercise is open at a time; the rest fold to a line. It follows you: the first one with sets left, unless you tap another.
+  const open=S.exOpen!=null&&w.ex[S.exOpen]?S.exOpen:w.ex.findIndex(setsLeft);
+  w.ex.forEach((e,i)=>{h+=exCard(w,id,i,i===open)});
   if(S.addEx)h+=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Add exercise</h2><button class="small" data-act="axclose">Cancel</button></div><div class="grid3"><input id="axn" placeholder="Name" style="grid-column:1/4"><input id="axs" type="number" inputmode="numeric" value="3" placeholder="sets"><input id="axr" value="8-12" placeholder="reps (8-12)"><button class="primary" data-act="axadd">Add</button></div></div>`;
   else h+=`<button data-act="axopen" style="width:100%;margin:4px 0">+ Add exercise</button>`;
+  h+=sessionFig(w);
   h+=`<div class="card"><label class="f">Session notes<textarea data-wnote="1" placeholder="How it felt, what to change…">${esc(w.note||'')}</textarea></label></div>`;
   h+=`<button class="primary" data-act="finish" style="width:100%;padding:12px">${w.done?'Update finished workout':'Finish workout'}</button>`;
   return h;
+}
+const setsLeft=e=>e.sets.some(s=>!s.d);
+const targetOf=(w,id,e)=>{const last=lastFor(e.n,w.date,id),stall=stallOf(liftHistory(e.n,w.date,id));return {last,stall,tg:targetFor(last,withJump(e,w.prog),stall)}};
+// What a blank set gets logged as: today's target, or the weight you used on the set before if you changed it.
+function setDefault(w,i,j){
+  const ex=w.ex[i],t=(targetOf(w,wid(w.date,w.prog),ex).tg||[])[j],prev=j>0?ex.sets[j-1]:null,pw=prev&&prev.d&&num(prev.w)!=null?num(prev.w):null;
+  return {w:pw!=null?pw:(t&&t.w?t.w:''),r:t?t.r:(prev&&prev.d?num(prev.r):'')};
+}
+// Which exercise to open after finishing a set: the superset partner, else stay until it's done, else the next one with sets left.
+function nextOpen(w,i){
+  const ex=w.ex[i],n=w.ex.length;
+  if(ex.ss)for(let k=1;k<n;k++){const j=(i+k)%n;if(w.ex[j].ss===ex.ss&&setsLeft(w.ex[j]))return j}
+  if(setsLeft(ex))return i;
+  const after=w.ex.findIndex((e,k)=>k>i&&setsLeft(e));return after>=0?after:w.ex.findIndex(setsLeft);
+}
+function exCard(w,id,i,open){
+  const e=w.ex[i],{last,stall,tg}=targetOf(w,id,e),done=e.sets.filter(s=>s.d).length,tag=e.ss?`<span class="tag">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:'';
+  if(!open)return `<button class="card exrow ${done===e.sets.length?'exdone':''}" data-act="exopen" data-i="${i}"><span class="grow"><b>${tag}${esc(e.n)}</b><span class="muted">${done===e.sets.length?setsDone(e).map(s=>`${num(s.w)||'BW'}×${s.r}`).join(' · '):tg?'Today: '+targetText(tg):`${e.sets.length} × ${esc(e.r)}`}</span></span><span class="excount">${done}/${e.sets.length}${done===e.sets.length?' ✓':''}</span></button>`;
+  const now=e.sets.findIndex(s=>!s.d),inp=(j,f,s,cls='')=>{const t=tg&&tg[j];return `<input class="${cls}" type="number" inputmode="${f==='w'?'decimal':'numeric'}" ${f==='w'?'step="2.5"':''} data-w="${i}" data-s="${j}" data-f="${f}" value="${s[f]}" placeholder="${f==='w'?(t?(t.w||'BW'):'lbs'):(t?t.r:'reps')}" aria-label="Set ${j+1} ${f==='w'?'weight':'reps'}">`};
+  const stepper=(j,f,s,unit,by)=>`<div class="stp"><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="-${by}" aria-label="${by} less">−</button><label>${inp(j,f,s)}<span>${unit}</span></label><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="${by}" aria-label="${by} more">+</button></div>`;
+  let h=`<div class="card exopen ${done===e.sets.length?'exdone':''}"><div class="row between"><div class="grow"><b>${tag}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(e.rest/60)}:${pad(e.rest%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
+  {const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];const nt=(te&&te.n===e.n)?(te.note||''):e.note;if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`}
+  if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
+  h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b></div>`:''}<div class="setlist">`;
+  e.sets.forEach((s,j)=>{
+    // The set you're on gets big − / + controls and a wide Done button. The others stay as compact rows you can still edit.
+    if(j===now)h+=`<div class="setnow"><div class="setlabel">Set ${j+1} of ${e.sets.length}</div><div class="stps">${stepper(j,'w',s,'lbs',5)}${stepper(j,'r',s,'reps',1)}</div><button class="primary big" data-act="setdone" data-i="${i}" data-j="${j}">Done</button></div>`;
+    else h+=`<div class="setrow ${s.d?'isdone':''}"><span>${j+1}</span>${inp(j,'w',s)}${inp(j,'r',s)}<button data-act="setdone" data-i="${i}" data-j="${j}">${s.d?'✓':'Done'}</button></div>`});
+  return h+`</div><div class="row" style="margin-top:8px"><button class="small" data-act="setadd" data-i="${i}">+ Set</button><button class="small" data-act="setdel" data-i="${i}">− Set</button><button class="small" data-act="rest" data-v="${e.rest}">Rest timer</button></div></div>`;
 }
 // True when this exercise entry beats every earlier session of the same lift (same kind: weighted or bodyweight).
 function isBest(b,name,date,id){const prev=bestOf(liftHistory(name,date,id).filter(x=>x.bw===b.bw));return !!prev&&b.v>prev.v+0.01}
@@ -1517,8 +1551,8 @@ app.addEventListener('change',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='snapfile'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snap=null;render()}return}
   if(el.id==='acboard'){setSharing(el.checked);return}
-  if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;render()}}
-  else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;render()}
+  if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;S.exOpen=null;render()}}
+  else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;S.exOpen=null;render()}
   else if(el.id==='liftsel'){S.lift=el.value;render()}
   else if(el.id==='goalsel'){const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:el.value});s.phaseStart=today();putSettings(s);render()}
   else if(ds.set){const s=clone(cfg());s[ds.set]=ds.set==='block'?(el.value||null):num(el.value);putSettings(s);render()}
@@ -1528,7 +1562,7 @@ app.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||!b.dataset.act)return;const ds=b.dataset,act=ds.act,i=+ds.i;
   if(act==='day'){S.dk=addDays(S.dk,+ds.v);if(S.dk>today())S.dk=today();render()}
   else if(act==='gotoday'){S.dk=today();render()}
-  else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.tab='workout';render();window.scrollTo(0,0)}
+  else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.exOpen=null;S.tab='workout';render();window.scrollTo(0,0)}
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
   else if(act==='foods'){S.sheet='foods';S.qedit=false;render()}
   else if(act==='sheetx'){S.sheet=null;S.qedit=false;render()}
@@ -1572,24 +1606,27 @@ app.addEventListener('click',e=>{
     clearSnap();render()}
   else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=addFood(dayDoc(S.dk),{n,c,p});putDay(S.dk,d);render()}
   else if(act==='setdone'){const w=curWorkout(),ex=w.ex[i],s=ex.sets[+ds.j];
-    if(!s.d){const id=wid(w.date,w.prog),tg=targetFor(lastFor(ex.n,w.date,id),withJump(ex,w.prog),stallOf(liftHistory(ex.n,w.date,id))),t=tg&&tg[+ds.j];
-      // Blank fields fill from today's target. If you already changed the weight on the set before, keep using that.
-      const prev=+ds.j>0?ex.sets[+ds.j-1]:null,pw=prev&&prev.d&&num(prev.w)!=null?num(prev.w):null;
-      if(s.w===''){if(pw!=null)s.w=pw;else if(t&&t.w)s.w=t.w}
-      if(s.r===''){if(t)s.r=t.r;else if(prev&&prev.d)s.r=num(prev.r)}
+    if(!s.d){const df=setDefault(w,i,+ds.j);if(s.w==='')s.w=df.w;if(s.r==='')s.r=df.r;
       if(s.r===''){const inp=app.querySelector(`input[data-w="${i}"][data-s="${ds.j}"][data-f="r"]`);inp&&inp.focus();return}
       s.d=true;if(!w.t0)w.t0=Date.now();
       const b=bestSet({sets:[s]}),before=bestSet({sets:ex.sets.filter(x=>x!==s)});
       const pr=b&&(!before||before.bw!==b.bw||b.v>before.v)&&isBest(b,ex.n,w.date,wid(w.date,w.prog));
+      const nx=nextOpen(w,i);S.exOpen=nx;
       putWorkout(w);render();startTimer(ex.rest||90);
+      if(nx!==i){const c=$('.exopen');if(c)c.scrollIntoView({block:'start',behavior:'smooth'})}
       if(pr){toast(`New best: ${ex.n} ${b.top}`);try{navigator.vibrate&&navigator.vibrate([60,40,120])}catch(x){}}}
     else{s.d=false;putWorkout(w);render()}}
+  else if(act==='exopen'){S.exOpen=i;S.swap=null;render()}
+  // − / + on the set you're on. An empty field starts from today's target, so one tap means "one more (or less) than planned".
+  else if(act==='step'){const w=curWorkout(),j=+ds.j,s=w.ex[i].sets[j],f=ds.f;if(!s)return;
+    const cur=s[f]===''?(num(setDefault(w,i,j)[f])||0):+s[f];s[f]=Math.max(f==='r'?1:0,cur+(+ds.v));putWorkout(w,700);
+    const el=app.querySelector(`input[data-w="${i}"][data-s="${j}"][data-f="${f}"]`);if(el)el.value=s[f]}
   else if(act==='setadd'){const w=curWorkout();const st=w.ex[i].sets;const l=st[st.length-1];st.push({w:l?l.w:'',r:'',d:false});putWorkout(w);render()}
   else if(act==='setdel'){const w=curWorkout();const st=w.ex[i].sets;if(st.length>1&&!st[st.length-1].d){st.pop();putWorkout(w);render()}}
   else if(act==='rest')startTimer(+ds.v);
   else if(act==='swap'){S.swap=S.swap===i?null:i;render()}
-  else if(act==='reorder'){S.reorder=!S.reorder;S.swap=null;render()}
-  else if(act==='mv'){const w=curWorkout();const j=i+(+ds.v);if(j<0||j>=w.ex.length)return;const t=w.ex[i];w.ex[i]=w.ex[j];w.ex[j]=t;putWorkout(w);render()}
+  else if(act==='reorder'){S.reorder=!S.reorder;S.swap=null;S.exOpen=null;render()}
+  else if(act==='mv'){const w=curWorkout();const j=i+(+ds.v);if(j<0||j>=w.ex.length)return;const t=w.ex[i];w.ex[i]=w.ex[j];w.ex[j]=t;S.exOpen=null;putWorkout(w);render()}
   else if(act==='swapx'){S.swap=null;render()}
   else if(act==='swapone'||act==='swapall'){const n=($('#swapname').value||'').trim();if(!n)return;const w=curWorkout();const ex=w.ex[i];
     if(act==='swapall'&&ex.ti!=null){const s=clone(cfg());const pe=s.program&&s.program.days[w.prog]&&s.program.days[w.prog].ex[ex.ti];if(pe){pe.n=n;delete pe.note;putSettings(s)}}
@@ -1598,7 +1635,7 @@ app.addEventListener('click',e=>{
   else if(act==='axclose'){S.addEx=false;render()}
   else if(act==='axopen'){S.addEx=true;render();const x=$('#axn');x&&x.focus()}
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
-    w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;render()}
+    w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;S.exOpen=w.ex.length-1;render()}
   else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
   else if(act==='stepnew')newStepLink();
   else if(act==='stepoff')stopStepLink();

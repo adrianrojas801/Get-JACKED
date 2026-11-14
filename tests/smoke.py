@@ -260,10 +260,19 @@ async def main():
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
         check("no new best in 3 sessions" in app.lower() and "110 × 12, 12, 12" in app, "A stalled lift gets a back-off suggestion and a lighter target")
-        check("40 × 11, 10, 9" in app, "Each exercise shows today's target: last time plus one rep")
+        check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1,
+              "One exercise is open, the rest fold to a line with today's target")
+        await page.click("button.exrow[data-i='1']"); await page.wait_for_timeout(200)
+        rep = "input[data-w='1'][data-s='0'][data-f=r]"
+        await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='1']")
+        up = await page.input_value(rep)
+        await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='-1']")
+        check(up == "12" and await page.input_value(rep) == "11", "The + and − buttons start from the target")
         await page.click("button[data-act=setdone][data-i='1'][data-j='0']"); await page.wait_for_timeout(300)
         done = (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']"))["ex"][1]["sets"][0]
         check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
+        check("set 2 of 3" in (await page.inner_text(".exopen")).lower(), "Done moves on to the next set")
+        await page.click("button.exrow[data-i='0']"); await page.wait_for_timeout(200)
         await page.fill("input[data-w='0'][data-s='0'][data-f=w]", "125"); await page.fill("input[data-w='0'][data-s='0'][data-f=r]", "10")
         await page.click("button[data-act=setdone]"); await page.wait_for_timeout(300)
         check("New best: Lat pulldown 125×10" in await page.inner_text("#toast"), "Beating your best shows a toast")
