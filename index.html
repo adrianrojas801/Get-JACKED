@@ -256,6 +256,7 @@ ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inl
 .mlist li{align-items:center}.mlist .grow{flex:1}.mlist li>span:last-child{white-space:nowrap}
 button.star{font-size:17px;padding:0 6px 0 0;color:var(--muted);line-height:1}button.star.on{color:var(--accent)}
 .buddy{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13.5px;color:var(--accent);font-weight:600}
+.sug{padding:10px 0;border-top:1px solid var(--line)}.sug:first-of-type{margin-top:8px}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.how summary{display:flex;flex-direction:column;gap:2px;cursor:pointer;list-style:none}
 details.how summary::-webkit-details-marker{display:none}
@@ -823,15 +824,17 @@ function refreshFood(d,changed){
   app.querySelectorAll('.chips button[data-i]').forEach(c=>{const src=FOOD_SRC[c.dataset.act],p=src&&src()[+c.dataset.i];if(!p)return;const q=pq(d,p);c.classList.toggle('has',q>0);const sp=c.querySelector('.qn');if(sp)sp.textContent='×'+q});
 }
 // Weight, steps and creatine are always there. The rest only show if you've used them lately, or under More.
-const BODY_MORE=[['sleep','Sleep (hrs)','7.5','0.1',14],['cardio','Cardio (min)','20','1',14],['waist','Waist (in, every 2 wks)','at belly button','0.1',28]];
+const BODY_MORE=[['sleep','Sleep (hrs)','7.5','0.1',14],['cardio','Cardio (min)','20','1',14]];
 const usedLately=(f,days)=>{for(let i=0;i<days;i++){const d=S.days[addDays(today(),-i)];if(d&&num(d[f])!=null)return true}return false};
 function bodyCard(k,d){
   const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
   const lastW=(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})();
+  const measOn=S.bodyMore||MEAS.some(([f])=>num(d[f])!=null)||(k===today()&&measDue()&&measDays().length>0);
   const shown=BODY_MORE.filter(([f,,,,days])=>S.bodyMore||num(d[f])!=null||usedLately(f,days)),hidden=BODY_MORE.length-shown.length;
   return `<div class="card"><div class="row between"><h2 style="margin:0">Body</h2><label class="check"><input type="checkbox" data-day="creatine" ${d.creatine?'checked':''}> Creatine</label></div>
     <div class="grid2" style="margin-top:10px">${fld('weight',k===today()?'Weight this morning (lbs)':'Weight (lbs)',lastW)}${fld('steps','Steps','8000','1')}${shown.map(([f,l,ph,st])=>fld(f,l,ph,st)).join('')}</div>
-    ${hidden||S.bodyMore?`<button class="link" data-act="bodymore" style="margin-top:6px">${S.bodyMore?'Show less':'Sleep, cardio, waist'}</button>`:''}</div>`;
+    ${measOn?`<h3>${k===today()&&measDue()?'Measurement day (every 2 weeks)':'Measurements (in)'}</h3><div class="grid2">${MEAS.map(([f,l,ph])=>fld(f,l,ph)).join('')}</div>`:''}
+    ${hidden||S.bodyMore||!measOn?`<button class="link" data-act="bodymore" style="margin-top:6px">${S.bodyMore?'Show less':'Sleep, cardio, measurements'}</button>`:''}</div>`;
 }
 function viewToday(){
   const k=S.dk,d=dayDoc(k),t=T();
@@ -1186,6 +1189,7 @@ function checkinCard(canDismiss){
   h+=`</ul>`;
   if(tr.adj||todo.length)h+=`<h3>This week</h3>${tr.adj?`<div style="margin-bottom:8px">${calButton(tr.adj)}</div>`:''}<ul class="plain">${todo.slice(0,3).map(x=>`<li>${x}</li>`).join('')}</ul>`;
   else h+=`<p class="good" style="margin:8px 0 0">Everything’s on track. Keep doing what you’re doing.</p>`;
+  if(suggestions().length)h+=`<p style="margin:8px 0 0">Your plan has ${suggestions().length} suggested change${suggestions().length>1?'s':''}. <button class="link" data-act="gosug">Review under Plan</button></p>`;
   return h+`<div class="row" style="margin-top:10px"><button class="small ${canDismiss?'primary':''}" data-act="${canDismiss?'checkok':'checkhide'}">${canDismiss?'Got it':'Close'}</button></div></div>`;
 }
 
@@ -1213,6 +1217,7 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
+  h+=measCard();
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -1280,6 +1285,78 @@ const SOURCES=[
   ['On a cut, losing about 0.7% of body weight a week kept more muscle than twice that pace.','Garthe 2011','https://pubmed.ncbi.nlm.nih.gov/21558571/'],
   ['Light and heavy weights grow similar muscle when sets are hard; heavy is better for max strength.','Schoenfeld 2017','https://pubmed.ncbi.nlm.nih.gov/28834797/'],
   ['Protein helps up to about 1.6 g per kg (0.7 g per lb) a day; the targets here sit above that.','Morton 2018','https://pubmed.ncbi.nlm.nih.gov/28698222/']];
+
+// ---------- program suggestions (the plan adapts; you approve each change) ----------
+// Planned hard sets per muscle a week, from the program and the weekly split (same counting as muscleWork).
+function plannedSets(){
+  const out={};
+  for(const k of PROG().sched){const d=k!=='rest'&&dayOf(k);if(!d)continue;
+    for(const e of d.ex){const mm=musFor(e.n);if(!mm)continue;mm.p.forEach(m=>{out[m]=(out[m]||0)+e.s});mm.s.forEach(m=>{out[m]=(out[m]||0)+e.s*0.5})}}
+  return out;
+}
+// Planet Fitness friendly moves for each muscle: [name, rep range, rest]. The first is what gets added when nothing
+// trains the muscle; the rest are what a stalled lift can be swapped for.
+const MOVES={
+  uchest:[['Incline DB press','8-12',120],['Low-to-high cable fly','12-15',90],['Incline Smith press','6-10',150]],
+  chest:[['Chest press machine','8-12',120],['Pec deck','10-15',90],['Cable fly','12-15',90]],
+  fdelt:[['Seated DB shoulder press','8-12',120],['Smith shoulder press','6-10',150]],
+  sdelt:[['Cable lateral raise','12-20',60],['DB lateral raise','12-20',60],['Machine lateral raise','12-20',60]],
+  rdelt:[['Reverse pec deck','12-20',60],['Face pull','12-20',60],['Cable rear delt fly','12-20',60]],
+  biceps:[['Cable curl','10-15',60],['DB incline curl','10-12',60],['Preacher curl machine','10-12',60]],
+  triceps:[['Triceps pushdown','10-15',60],['Overhead cable triceps extension','10-15',60]],
+  forearms:[['Wrist curl','12-20',60],['Reverse curl','10-15',60]],
+  lats:[['Lat pulldown','8-12',120],['Neutral-grip lat pulldown','8-12',120],['Straight-arm pulldown','12-15',90]],
+  uback:[['Seated cable row','8-12',120],['Machine row','8-12',120]],
+  traps:[['DB shrug','10-15',90]],lback:[['Back extension','10-15',90]],
+  abs:[['Cable crunch','10-15',60],['Hanging knee raise','10-15',60]],obliques:[['Cable woodchop','12-15',60]],
+  glutes:[['Smith hip thrust','8-12',150],['Cable glute pull-through','12-15',90]],
+  quads:[['Leg extension','10-15',90],['Hack squat','8-12',150],['Leg press','10-15',150]],
+  hams:[['Seated leg curl','10-15',90],['Lying leg curl','10-15',90]],
+  calves:[['Standing calf raise','10-15',60],['Seated calf raise','12-20',60]],
+  adductors:[['Hip adduction machine','12-20',60]],abductors:[['Hip abduction machine','12-20',60]]};
+const planNames=()=>new Set(Object.values(PROG().days).flatMap(d=>d.ex.map(e=>e.n.toLowerCase())));
+// Up to four changes worth making to the program right now. Each has an id, what it does, why, and apply(settings).
+//  - a focus muscle whose PLAN gives it under 10 sets: one more set on a lift that trains it, or a new lift if none does
+//    (if the plan is fine and you just missed days, that's the check-in's job, not a program change)
+//  - a lift with no new best for 4+ weeks, so the 10% back-off didn't fix it: swap it for a similar move
+function suggestions(){
+  const out=[],prog=PROG(),plan=plannedSets(),skip=cfg().skipSug||{},wk=weekStart(today()),active=prog.order.filter(k=>prog.sched.includes(k)&&dayOf(k));
+  const add=s=>{if(skip[s.id]!==wk)out.push(s)};
+  for(const m of focusList()){const have=plan[m]||0;if(have>=SETS_LO)continue;
+    let best=null;for(const k of active)dayOf(k).ex.forEach((e,i)=>{if(mainLiftOf(m)(e.n)&&e.s<5&&(!best||e.s<best.e.s))best={k,i,e}});
+    const why=`${MUS_NAME[m]} is a focus, but your plan gives it ${r1(have)} sets a week.`;
+    if(best)add({id:'set:'+m,text:`Add a set of ${best.e.n} on ${titleOf(best.k)}`,why,apply:s=>{s.program.days[best.k].ex[best.i].s++}});
+    else if(MOVES[m]&&active.length){const mv=MOVES[m].find(x=>!planNames().has(x[0].toLowerCase()))||MOVES[m][0],k=active.slice().sort((a,b)=>dayOf(a).ex.length-dayOf(b).ex.length)[0];
+      add({id:'add:'+m,text:`Add ${mv[0]} (3 × ${mv[1]}) to ${titleOf(k)}`,why:`${MUS_NAME[m]} is a focus, but nothing in your plan trains it directly.`,apply:s=>{s.program.days[k].ex.push({n:mv[0],s:3,r:mv[1],rest:mv[2]})}})}}
+  for(const n of new Set(active.flatMap(k=>dayOf(k).ex.map(e=>e.n)))){
+    const st=stallOf(liftHistory(n)),mm=musFor(n);if(!st||!mm||daysBetween(st.since,today())<28)continue;
+    const alt=(MOVES[mm.p[0]]||[]).find(x=>!planNames().has(x[0].toLowerCase()));if(!alt)continue;
+    add({id:'swap:'+n,text:`Swap ${n} for ${alt[0]}`,why:`No new best since ${short(st.since)}, even after backing off. A similar move often gets it going again.`,
+      apply:s=>{for(const d of Object.values(s.program.days))for(const e of d.ex)if(e.n===n){e.n=alt[0];delete e.note;delete e.inc}}})}
+  return out.slice(0,4);
+}
+function suggestCard(){
+  const sg=suggestions();if(!sg.length)return '';
+  return `<div class="card newplan" id="sugs"><h2>Suggested changes</h2><div class="muted">Based on your focus muscles and your lifts. Nothing changes until you tap Do it.</div>
+    ${sg.map(s=>`<div class="sug"><b>${esc(s.text)}</b><div class="muted">${esc(s.why)}</div><div class="row" style="margin-top:6px"><button class="small primary" data-act="sugdo" data-id="${esc(s.id)}">Do it</button><button class="small" data-act="sugskip" data-id="${esc(s.id)}">Not now</button></div></div>`).join('')}</div>`;
+}
+
+// ---------- measurements ----------
+// Tape measurements every 2 weeks, kept on the day's log next to weight. Waist is the check on fat; the rest show where size is going.
+const MEAS=[['chest','Chest','around the nipple line'],['shoulders','Shoulders','around the widest point'],['arm','Arm','flexed, around the peak'],['waist','Waist','at belly button']];
+const measDays=()=>Object.values(S.days).filter(d=>d&&MEAS.some(([f])=>num(d[f]))).sort((a,b)=>a.date.localeCompare(b.date));
+const measDue=()=>{const ds=measDays();return !ds.length||daysBetween(ds[ds.length-1].date,today())>=14};
+function measCard(){
+  const ds=measDays();
+  let h=`<div class="card"><h2>Measurements</h2>`;
+  if(!ds.length)return h+`<p class="muted" style="margin:0">Measure your chest, shoulders, arm and waist every 2 weeks (on the Today tab, under Body). This shows whether the weight is going where you want it.</p></div>`;
+  const rows=MEAS.map(([f,l])=>{const xs=ds.filter(d=>num(d[f]));if(!xs.length)return '';const a=num(xs[0][f]),b=num(xs[xs.length-1][f]),ch=r1(b-a);
+    return `<tr><td>${l}</td><td>${a}"</td><td>${b}"</td><td class="${f==='waist'?'':ch>0?'good':''}">${xs.length>1?(ch>=0?'+':'')+ch+'"':'–'}</td></tr>`}).join('');
+  h+=`<table class="simple"><tr><th></th><th>${short(ds[0].date)}</th><th>${short(ds[ds.length-1].date)}</th><th>Change</th></tr>${rows}</table>`;
+  const up=MEAS.filter(([f])=>f!=='waist').map(([f,l])=>{const xs=ds.filter(d=>num(d[f]));return xs.length>1?[l,num(xs[xs.length-1][f])-num(xs[0][f])]:null}).filter(x=>x&&x[1]>=0.2);
+  if(up.length)h+=`<p class="good" style="margin:8px 0 0">${up.map(x=>x[0]).join(', ')} ${up.length>1?'are':'is'} growing.</p>`;
+  return h+`<div class="muted" style="margin-top:6px">${measDue()?'A new measurement is due. Log it on Today under Body.':'Next measurement: '+short(addDays(ds[ds.length-1].date,14))+'.'}</div></div>`;
+}
 
 // ---------- sets per muscle ----------
 // Hard sets per muscle in the 7 days up to `end`. A lift's main muscles count a full set, helpers half.
@@ -1545,7 +1622,7 @@ function viewAccount(){
 function viewPlan(){
   if(S.redo)return viewIntake(true);
   const t=T(),c=cfg(),bw=blockWeek();
-  let h=`<div class="card"><h2>Targets</h2><div class="grid2">
+  let h=suggestCard()+`<div class="card"><h2>Targets</h2><div class="grid2">
     <label class="f">Calories / day<input type="number" inputmode="numeric" data-set="cal" value="${t.cal}"></label>
     <label class="f">Protein (g) / day<input type="number" inputmode="numeric" data-set="pro" value="${t.pro}"></label>
     <label class="f">Goal weight (lbs)<input type="number" inputmode="decimal" data-set="goal" value="${t.goal}"></label>
@@ -1725,6 +1802,9 @@ app.addEventListener('click',e=>{
   else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);s.calAdj=weekStart(today());putSettings(s);render()}
   else if(act==='focus'){const s=clone(cfg()),f=focusList();s.focus=f.includes(ds.k)?f.filter(k=>k!==ds.k):[...f,ds.k];putSettings(s);render()}
+  else if(act==='sugdo'){const sg=suggestions().find(x=>x.id===ds.id);if(!sg)return;const before=clone(cfg()),s=clone(cfg());sg.apply(s);putSettings(s);render();toast('Plan updated: '+sg.text,()=>putSettings(before))}
+  else if(act==='gosug'){S.tab='plan';render();window.scrollTo(0,0)}
+  else if(act==='sugskip'){const s=clone(cfg());s.skipSug=Object.assign({},s.skipSug,{[ds.id]:weekStart(today())});putSettings(s);render()}
   else if(act==='checkok'){const s=clone(cfg());s.checkin=weekStart(today());putSettings(s);render()}
   else if(act==='checkshow'||act==='checkhide'){S.showCheckin=act==='checkshow';render()}
   else if(act==='phase'){const p=nextPhases()[i];if(!p||!goalReached())return;const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:p.goal});s.cal=p.cal;s.pro=p.pro;s.goal=p.gw;s.phaseStart=today();putSettings(s);toast(p.label+': targets updated');render()}

@@ -222,6 +222,8 @@ async def main():
                                                    "sets": [{"w": 40, "r": r, "d": True} for r in (10, 10, 9)]})
         for n in (2, 3, 4):
             seed[f"days/{ago(n)}"] = {"date": ago(n), "food": [], "weight": 171}
+        seed[f"days/{ago(2)}"].update({"chest": 40, "arm": 14.25, "waist": 32})
+        seed[f"days/{ago(20)}"] = {"date": ago(20), "food": [], "chest": 39.5, "arm": 14, "waist": 32}
         buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2,
                   "planned": 3, "last_workout": ago(0), "last_title": "Push"}]
         page = await new_page(browser, errors, seed, buddy)
@@ -290,6 +292,8 @@ async def main():
         check(await page.locator(".seg button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
               "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        check("measurements" in app and '+0.5"' in app and "chest, arm are growing" in app and "next measurement" in app,
+              "Body shows tape measurements, first against latest")
         await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
         s = await settings(page)
         check(s["profile"]["goal"] == "cut" and s["cal"] == 1750 and s["pro"] == 170 and s["goal"] == 162 and s["phaseStart"] == ago(0),
@@ -311,7 +315,30 @@ async def main():
         check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
               "Marking a focus muscle saves it and flags it when it's under 10 sets")
 
-        await page.wait_for_timeout(3300)
+        # The plan adapts: a focus muscle nothing trains gets a suggested lift, applied with one tap and undoable.
+        check(await page.evaluate("Object.entries(MOVES).every(([m,list])=>list.every(x=>(musFor(x[0])||{p:[]}).p.includes(m)))"),
+              "Every suggested move is mapped to the muscle it's suggested for")
+        await page.click("svg.mfig-xl path[data-mus=quads]"); await page.wait_for_timeout(200)
+        await page.click(".banner button[data-act=focus][data-k=quads]"); await page.wait_for_timeout(300)
+        await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(300)
+        plan_txt = (await page.inner_text("#app")).lower()
+        check("suggested changes" in plan_txt and "add leg extension (3 × 10-15) to back day" in plan_txt and "add a set of lat pulldown" not in plan_txt,
+              "Plan suggests a lift for a focus muscle the program doesn't train, and leaves well-covered ones alone")
+        await page.click("button[data-act=sugdo]"); await page.wait_for_timeout(300)
+        ex = (await settings(page))["program"]["days"]["a"]["ex"]
+        check(len(ex) == 3 and ex[2] == {"n": "Leg extension", "s": 3, "r": "10-15", "rest": 90} and "Plan updated" in await page.inner_text("#toast"),
+              "Do it changes the program")
+        await page.click("#undo"); await page.wait_for_timeout(300)
+        check(len((await settings(page))["program"]["days"]["a"]["ex"]) == 2, "Undo puts the program back")
+        await page.click("button[data-act=sugskip]"); await page.wait_for_timeout(300)
+        check("suggested changes" not in (await page.inner_text("#app")).lower() and (await settings(page))["skipSug"] == {"add:quads": sunday},
+              "Not now hides a suggestion for the week")
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(200)
+        await page.fill("input[data-day=shoulders]", "48.5"); await page.wait_for_timeout(1000)
+        check((await page.evaluate(f"window.__docs['days/{ago(0)}']")).get("shoulders") == 48.5, "A measurement saves on the day's log")
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
+
+        await page.wait_for_timeout(3500)
         await page.click("button[data-act=psec][data-v=friends]"); await page.wait_for_timeout(500)
         app = (await page.inner_text("#app")).lower()
         mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
