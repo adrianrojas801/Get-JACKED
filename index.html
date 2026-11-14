@@ -213,6 +213,7 @@ details.pday summary::-webkit-details-marker{display:none}
 <header><div class="brand"><h1>Get Jacked</h1><div id="hsub"></div></div><div class="hright"><button id="me" type="button" aria-label="Account and data">?</button><span id="status">Connecting…</span></div></header>
 <div id="auth"></div>
 <main id="app"></main>
+<div id="toast" role="status" aria-live="polite"></div>
 <div id="timer"><b id="tleft">0:00</b><button class="small" data-t="-15">−15</button><button class="small" data-t="15">+15</button><button class="small" data-t="stop">Done</button></div>
 <nav id="nav">
   <button data-tab="today"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v14H4z"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Today</button>
@@ -529,6 +530,9 @@ function tick(){const left=Math.round((TM.end-Date.now())/1000);const el=$('#tle
 function stopTimer(){clearInterval(TM.iv);$('#timer').classList.remove('show','over')}
 $('#timer').addEventListener('click',e=>{const t=e.target.dataset.t;if(!t)return;if(t==='stop')return stopTimer();TM.end+= +t*1000;if(TM.end-Date.now()>0)$('#timer').classList.remove('over');tick()});
 
+// ---------- toast ----------
+function toast(msg){const el=$('#toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2600)}
+
 // ---------- charts ----------
 function chart(series,{h=150,goal=null,xl=null,yf=v=>Math.round(v)}={}){
   const all=series.flatMap(s=>s.pts);if(all.length<2)return '<p class="muted">Log a few more entries to see a chart.</p>';
@@ -741,6 +745,7 @@ function viewWorkout(){
       <div class="muted" style="margin-top:6px">Only changes today’s workout. Next week starts in the planned order again.</div></div>`;
     return h;
   }
+  h+=`<div style="margin:0 4px">${bar(doneSets,allSets||1)}</div>`;
   h+=sessionFig(w);
   if(w.done)h+=summary(w,id);
   w.ex.forEach((e,i)=>{
@@ -837,7 +842,16 @@ function viewProgress(){
     if(st)h+=`<p class="warn" style="margin:8px 0 0">No new best in ${st.n} sessions (since ${short(st.since)}). Take about 10% off and build back up, or swap it for a similar move.</p>`;
     h+=chart([{pts:sess.map((x,i)=>[i,x.v]),color:'var(--accent)'}],{xl:sess.length>1?[short(sess[0].date),short(sess[sess.length-1].date)]:null});
     h+=`<div class="muted">${bw?'The line is your most reps in a set each session.':'The line is your estimated 1-rep max from your best set each session.'}</div><table class="simple" style="margin-top:6px"><tr><th>Date</th><th>Best set</th><th>${bw?'Reps':'Est. 1RM'}</th></tr>${sess.slice(-8).reverse().map(x=>`<tr><td>${short(x.date)}</td><td>${x.top}</td><td>${Math.round(x.v)}</td></tr>`).join('')}</table>`}
-  return h+`</div>`;
+  h+=`</div>`;
+  return h+recordsCard(names);
+}
+// Best set ever for each lift, newest record first.
+function recordsCard(names){
+  const rows=names.map(n=>{const b=bestOf(liftHistory(n));return b&&{n,b}}).filter(Boolean).sort((x,y)=>y.b.date.localeCompare(x.b.date));
+  if(!rows.length)return '';
+  const wk=addDays(today(),-7),show=S.recAll?rows:rows.slice(0,6);
+  return `<div class="card"><h2>Records</h2><table class="simple"><tr><th>Lift</th><th>Best set</th><th>Date</th></tr>${show.map(({n,b})=>`<tr><td>${esc(n)}</td><td>${b.top}</td><td>${short(b.date)}${b.date>wk?' <span class="tag">new</span>':''}</td></tr>`).join('')}</table>
+    ${rows.length>6?`<button class="small" data-act="recall" style="margin-top:8px">${S.recAll?'Show fewer':`Show all ${rows.length}`}</button>`:''}</div>`;
 }
 
 function goalNotes(){
@@ -1183,7 +1197,11 @@ app.addEventListener('click',e=>{
       const prev=+ds.j>0?ex.sets[+ds.j-1]:null;const src=(prev&&prev.d)?prev:ls;
       if(s.w===''&&src&&num(src.w)!=null)s.w=num(src.w);if(s.r===''&&src)s.r=num(src.r);
       if(s.r===''){const inp=app.querySelector(`input[data-w="${i}"][data-s="${ds.j}"][data-f="r"]`);inp&&inp.focus();return}
-      s.d=true;putWorkout(w);render();startTimer(ex.rest||90)}
+      s.d=true;if(!w.t0)w.t0=Date.now();
+      const b=bestSet({sets:[s]}),before=bestSet({sets:ex.sets.filter(x=>x!==s)});
+      const pr=b&&(!before||before.bw!==b.bw||b.v>before.v)&&isBest(b,ex.n,w.date,wid(w.date,w.prog));
+      putWorkout(w);render();startTimer(ex.rest||90);
+      if(pr){toast(`New best: ${ex.n} ${b.top}`);try{navigator.vibrate&&navigator.vibrate([60,40,120])}catch(x){}}}
     else{s.d=false;putWorkout(w);render()}}
   else if(act==='setadd'){const w=curWorkout();const st=w.ex[i].sets;const l=st[st.length-1];st.push({w:l?l.w:'',r:'',d:false});putWorkout(w);render()}
   else if(act==='setdel'){const w=curWorkout();const st=w.ex[i].sets;if(st.length>1&&!st[st.length-1].d){st.pop();putWorkout(w);render()}}
@@ -1200,7 +1218,8 @@ app.addEventListener('click',e=>{
   else if(act==='axopen'){S.addEx=true;render();const x=$('#axn');x&&x.focus()}
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
     w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;render()}
-  else if(act==='finish'){const w=curWorkout();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
+  else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
+  else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);putSettings(s);render()}
   else if(act==='newblock'){const s=clone(cfg());s.block=today();putSettings(s);render()}
   else if(act==='preadd'){const s=clone(cfg());const ps=clone(presets());ps.push({g:'Snacks',n:'New food',c:100,p:10});s.presets=ps;putSettings(s);render()}
