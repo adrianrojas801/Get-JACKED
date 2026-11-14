@@ -38,7 +38,8 @@ header{position:sticky;top:0;z-index:4;padding:12px max(16px,calc((100% - 612px)
 .brand{display:flex;flex-direction:column;gap:3px;min-width:0}
 #hsub{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 h1{font-family:"Big Shoulders Display","Arial Narrow",var(--font);font-size:28px;margin:0;font-weight:800;letter-spacing:.015em;color:var(--accent);line-height:.85;text-transform:uppercase}
-.hright{display:flex;align-items:center;gap:10px;flex:none}
+.hright{display:flex;flex-direction:column;align-items:center;gap:4px;flex:none}
+.hright #status{font-size:11px;white-space:nowrap}
 #me{width:36px;height:36px;padding:0;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:15px;text-transform:uppercase;background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
 #me.on{background:var(--accent);color:var(--card);border-color:var(--accent)}
 .backrow{display:flex;align-items:center;gap:10px;margin:4px 0 0}
@@ -208,7 +209,7 @@ details.pday summary::-webkit-details-marker{display:none}
 </style>
 </head>
 <body>
-<header><div class="brand"><h1>Get Jacked</h1><div id="hsub"></div></div><div class="hright"><span id="status">Connecting…</span><button id="me" type="button" aria-label="Account and data">?</button></div></header>
+<header><div class="brand"><h1>Get Jacked</h1><div id="hsub"></div></div><div class="hright"><button id="me" type="button" aria-label="Account and data">?</button><span id="status">Connecting…</span></div></header>
 <div id="auth"></div>
 <main id="app"></main>
 <div id="timer"><b id="tleft">0:00</b><button class="small" data-t="-15">−15</button><button class="small" data-t="15">+15</button><button class="small" data-t="stop">Done</button></div>
@@ -870,7 +871,6 @@ function viewProgramEditor(){
 function viewAccount(){
   let h=`<div class="backrow"><button class="small" data-act="meback">← Back</button></div>`;
   h+=accountUI();
-  h+=`<div class="card"><h2>Import data</h2><p class="muted">Paste a backup (from “Copy all data” in the old Claude tracker or this app). Matching days and workouts are replaced; everything else stays.</p><textarea id="impbox" style="height:90px" placeholder='{"settings":…,"days":…,"workouts":…}'></textarea><div class="row" style="margin-top:8px"><button class="small primary" data-act="import" ${S.importing?'disabled':''}>${S.importing?'Importing…':'Import'}</button><span class="muted">${esc(S.importMsg||'')}</span></div></div>`;
   h+=`<div class="card"><h2>Backup</h2><p class="muted">Your data saves to your account automatically. This copies all of it as text, if you ever want a backup.</p><button class="small" data-act="copy">${S.copied?'Copied ✓':'Copy all data'}</button>${S.copyText?`<textarea readonly style="margin-top:8px;height:120px">${esc(S.copyText)}</textarea>`:''}</div>`;
   return h;
 }
@@ -1022,7 +1022,6 @@ app.addEventListener('click',e=>{
   else if(act==='signout'){signOut()}
   else if(act==='pwchange'){changePassword()}
   else if(act==='namesave'){saveName()}
-  else if(act==='import'){runImport()}
   else if(act==='copy'){const txt=JSON.stringify({settings:S.settings,days:S.days,workouts:S.workouts});S.copyText=null;
     Promise.resolve().then(()=>navigator.clipboard.writeText(txt)).then(()=>{S.copied=true;render();setTimeout(()=>{S.copied=false;render()},2500)}).catch(()=>{S.copyText=txt;render()})}
 });
@@ -1082,20 +1081,6 @@ function accountUI(){
 async function saveName(){const v=($('#acname').value||'').trim().slice(0,40);const {error}=await SB.from('profiles').update({display_name:v}).eq('id',ME.user.id);S.nameMsg=error?'Couldn’t save the name.':'Saved ✓';if(!error&&ME.profile)ME.profile.display_name=v;render()}
 async function changePassword(){const v=$('#acpw').value||'';if(v.length<8){S.pwMsg='Use at least 8 characters.';return render()}const {error}=await SB.auth.updateUser({password:v});S.pwMsg=error?(error.message||'Couldn’t change it.'):'Password changed ✓';render()}
 async function signOut(){flushAll();await sleep(300);try{await SB.auth.signOut()}catch(e){}location.replace(location.pathname)}
-async function runImport(){
-  let j;try{j=JSON.parse(($('#impbox').value||'').trim())}catch(e){S.importMsg='That isn’t valid backup text.';return render()}
-  if(!j||typeof j!=='object'){S.importMsg='That isn’t valid backup text.';return render()}
-  const rows=[];const uid=ME.user.id,now=new Date().toISOString();
-  for(const [id,d] of Object.entries(j.days||{}))if(d&&typeof d==='object')rows.push({user_id:uid,coll:'days',id,data:d,updated_at:now});
-  for(const [id,d] of Object.entries(j.workouts||{}))if(d&&typeof d==='object')rows.push({user_id:uid,coll:'workouts',id,data:d,updated_at:now});
-  if(j.settings&&typeof j.settings==='object'&&Object.keys(j.settings).length){const keep={};for(const k of ['program','profile','legacy','foodGroups'])if(cfg()[k]!=null&&j.settings[k]==null)keep[k]=cfg()[k];
-    rows.push({user_id:uid,coll:'settings',id:'main',data:Object.assign(keep,j.settings),updated_at:now})}
-  if(!rows.length){S.importMsg='Nothing to import in that text.';return render()}
-  S.importing=true;S.importMsg='';render();
-  let ok=0,bad=0;for(let k=0;k<rows.length;k+=200){const {error}=await SB.from('docs').upsert(rows.slice(k,k+200),{onConflict:'user_id,coll,id'});if(error)bad+=Math.min(200,rows.length-k);else ok+=Math.min(200,rows.length-k)}
-  S.importing=false;S.importMsg=bad?`Imported ${ok}, failed ${bad}. Try again.`:`Imported ${ok} items ✓`;
-  if(S.db)S.db.pullAll();render();
-}
 
 // ---------- sign-in screens ----------
 function authScreen(mode,msg){
