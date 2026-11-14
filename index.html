@@ -929,32 +929,39 @@ function snapUI(){
   }
   return h;
 }
+// ---------- photo food estimates (off until the food-estimate function has its key; README, "Optional features") ----------
+// Who is eating, so portions are judged for the right person. The estimating rules themselves live in the Edge Function.
+function eaterLine(){
+  if(isLegacy())return `A 5'8", 165 lb man near Chicago who mostly eats restaurant food (Sweetgreen, Cava, Chick-fil-A, Portillo's, Jamba) and home-cooked Mexican food.`;
+  const p=cfg().profile||{};return `${p.sex==='f'?'A woman':p.sex==='m'?'A man':'An adult'}${p.weight?`, about ${p.weight} lb`:''}, ${GOALS[goalOf()].toLowerCase()}.`;
+}
+const blobToBase64=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(new Error('read'));r.readAsDataURL(b)});
+// Talks to the food-estimate Edge Function. Errors carry a short code that runSnap() turns into plain English.
+const edgeSampler=()=>({async estimate({note,who,image}){
+  const body={note,who};
+  if(image){try{body.image=await blobToBase64(await shrinkImage(image,1024,0.8))}catch(e){throw {code:'image_rejected'}}}
+  const {data,error}=await SB.functions.invoke('food-estimate',{body});
+  if(error){let code='failed';try{code=(await error.context.json()).error||code}catch(e){}throw {code}}
+  if(!data||data.error)throw {code:(data&&data.error)||'failed'};
+  return data;
+}});
+// Asked once per visit, when the food sheet first opens: the feature only shows up if the function says it's ready.
+async function probeEstimates(){
+  if(S.estProbe||!SB||!SB.functions)return;S.estProbe=true;
+  try{const {data,error}=await SB.functions.invoke('food-estimate',{body:{ping:true}});if(!error&&data&&data.ready){S.sample=edgeSampler();S.imgOK=true;if(S.sheet)softRender()}}catch(e){}
+}
 async function runSnap(){
   const txt=(S.snapTxt||'').trim();
   if(!S.snapFile&&!txt){S.snap={err:'Add a photo or a description first.'};render();return}
   S.snap={busy:true};render();
-  const prompt=`You estimate nutrition for a personal food log. The person is a 5'8", 165 lb guy near Chicago who mostly eats restaurant food (Sweetgreen, Cava, Chick-fil-A, Portillo's, Jamba) and home-cooked Mexican food.
-${S.snapFile?'The attached image shows his food, a receipt, an order screen, or a nutrition label.':'There is no image; use only his description.'}
-His note: "${txt.replace(/"/g,"'")||'(none)'}"
-
-Rules:
-- List each distinct food or drink he ate as its own item.
-- For chain restaurant orders, use the chain's published nutrition numbers. For build-your-own places (Cava, Sweetgreen, Chipotle), add up the published numbers for each listed component (base, each protein scoop, dips, toppings, dressing) and return the bowl as one item. Don't hedge about published numbers; only mention uncertainty when a portion or ingredient isn't visible or listed.
-- For a nutrition label, use the per-serving numbers; assume 1 serving unless his note says otherwise.
-- For home food, estimate typical portions from what's visible. Count tortillas individually.
-- c is calories for ONE unit, p is protein grams for ONE unit, q is how many units.
-- Reply with only JSON in this shape: {"items":[{"n":"short name","c":60,"p":1.5,"q":6}],"note":"one short sentence, only if something was assumed"}
-- If there is no food or nutrition info, reply {"items":[],"note":"short reason"}.`;
   try{
-    const opts={};if(S.snapFile)opts.images=[S.snapFile];
-    const r=await S.sample.json(prompt,opts);
+    const r=await S.sample.estimate({note:txt,who:eaterLine(),image:S.snapFile});
     const items=(r&&Array.isArray(r.items)?r.items:[]).slice(0,15).map(x=>({n:String((x&&x.n)||'Food').slice(0,60),c:Math.max(0,Math.round(+(x&&x.c)||0)),p:Math.max(0,r1(+(x&&x.p)||0)),q:Math.max(1,Math.round(+(x&&x.q)||1))}));
     S.snap={items,note:String((r&&r.note)||'').slice(0,200)};
   }catch(e){
     const c=e&&e.code;
-    const m={not_granted:'Claude access was declined for this page.',rate_limited:'Usage limit reached or too many requests. Try again later.',image_rejected:'That photo couldn’t be read. Try a different one.',session_expired:'Sign in to claude.ai again.',invalid_json:'Couldn’t read the estimate. Try again.',refused:'Claude couldn’t estimate that one. Try describing it instead.',empty_completion:'No estimate came back. Try again.'};
-    if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(c))S.sampleOff=true;
-    if(c==='images_unavailable')S.imgOK=false;
+    const m={rate_limited:'You’ve used today’s estimates. Try again tomorrow, or add it by hand below.',image_rejected:'That photo couldn’t be read. Try a different one.',session_expired:'Your sign-in ran out. Sign in again.',invalid_json:'Couldn’t read the estimate. Try again.',not_configured:'Photo estimates aren’t set up yet.'};
+    if(c==='not_configured')S.sampleOff=true;
     S.snap={err:m[c]||'Estimate failed. Try again.'};
   }
   render();
@@ -1694,7 +1701,7 @@ function viewAccount(){
   let h=`<div class="backrow"><button class="small" data-act="meback">← Back</button></div>`;
   h+=viewRequests();
   h+=pendingCard();
-  h+=accountUI()+stepsCard();
+  h+=accountUI()+remindersCard()+stepsCard();
   h+=`<div class="card"><h2>Backup</h2><p class="muted">Your data saves to your account automatically. This copies all of it as text, if you ever want a backup.</p><button class="small" data-act="copy">${S.copied?'Copied ✓':'Copy all data'}</button>${S.copyText?`<textarea readonly style="margin-top:8px;height:120px">${esc(S.copyText)}</textarea>`:''}</div>`;
   return h;
 }
@@ -1752,7 +1759,7 @@ function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
 function meBadge(){const b=$('#me');if(!b)return;const n=((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email)||'').trim();b.textContent=n?n[0]:'?';b.classList.toggle('on',S.tab==='account')}
-function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account';S.reqs=null;S.reqMsg=null;S.stepLink=undefined}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
+function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account';S.reqs=null;S.reqMsg=null;S.stepLink=undefined;S.push=undefined}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
 $('#me').addEventListener('click',toggleAccount);
 function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&$('#app').contains(a)){S.needRender=true;return}render()}
 document.addEventListener('focusout',()=>setTimeout(()=>{if(S.needRender){const a=document.activeElement;if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render()}},50));
@@ -1785,6 +1792,7 @@ app.addEventListener('change',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='photofile'){const f=el.files&&el.files[0];if(f)addPhoto(f,POSES.some(p=>p[0]===S.pose)?S.pose:'front');return}
   if(el.id==='snapfile'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snap=null;render()}return}
+  if(ds.push){pushHour(ds.push,+el.value);return}
   if(el.id==='acboard'){setSharing(el.checked);return}
   if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;S.exOpen=null;render()}}
   else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;S.exOpen=null;render()}
@@ -1800,7 +1808,7 @@ app.addEventListener('click',e=>{
   else if(act==='gotoday'){S.dk=today();render()}
   else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.exOpen=null;S.tab='workout';render();window.scrollTo(0,0)}
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
-  else if(act==='foods'){S.sheet='foods';S.qedit=false;render()}
+  else if(act==='foods'){S.sheet='foods';S.qedit=false;render();probeEstimates()}
   else if(act==='sheetx'){S.sheet=null;S.qedit=false;render()}
   else if(act==='bodymore'){S.bodyMore=!S.bodyMore;render()}
   else if(act==='intake')submitIntake();
@@ -1873,6 +1881,8 @@ app.addEventListener('click',e=>{
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
     w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;S.exOpen=w.ex.length-1;render()}
   else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
+  else if(act==='pushon')pushOn();
+  else if(act==='pushoff')pushOff();
   else if(act==='stepnew')newStepLink();
   else if(act==='stepoff')stopStepLink();
   else if(act==='stepdone'){S.stepTok=null;render()}
@@ -1987,6 +1997,46 @@ function stepsCard(){
     <div class="muted" style="margin-top:6px">A new link stops the old Shortcut until you paste the new token into it.</div>`;
   else h+=`<p class="muted" style="margin-top:0">Have your iPhone send your Apple Health steps to the app every day, so you don’t have to type them. It takes about 5 minutes to set up in the Shortcuts app.</p><button class="small primary" data-act="stepnew">Set up automatic steps</button>`;
   if(S.stepMsg)h+=`<div class="err">${esc(S.stepMsg)}</div>`;
+  return h+`</div>`;
+}
+
+// ---------- reminders (off until config.js has vapidPublicKey; README, "Optional features") ----------
+// A morning weigh-in nudge and an evening workout nudge, sent as push notifications by the send-reminders function.
+const pushReady=()=>!!CFG.vapidPublicKey&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const keyBytes=b64=>Uint8Array.from(atob((b64+'='.repeat((4-b64.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+const hourLabel=h=>`${h%12||12} ${h<12?'AM':'PM'}`;
+async function loadPush(){
+  try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+    if(!sub){S.push={on:false};return softRender()}
+    const {data}=await SB.from('push_subs').select('morning,evening').eq('endpoint',sub.endpoint).maybeSingle();
+    S.push=data?{on:true,endpoint:sub.endpoint,morning:data.morning,evening:data.evening}:{on:false}}
+  catch(e){S.push={on:false}}
+  if(S.tab==='account')softRender();
+}
+async function pushOn(){
+  try{if(await Notification.requestPermission()!=='granted'){S.pushMsg='Notifications are blocked for this app. Allow them in your phone’s settings, then try again.';return render()}
+    const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(CFG.vapidPublicKey)}),j=sub.toJSON();
+    const row={endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,tz:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',morning:8,evening:18};
+    const {error}=await SB.from('push_subs').upsert(row,{onConflict:'endpoint'});if(error)throw error;
+    S.pushMsg='';S.push={on:true,endpoint:row.endpoint,morning:8,evening:18}}
+  catch(e){S.pushMsg='Couldn’t turn reminders on. On an iPhone, add the app to your home screen first and open it from there.'}
+  render();
+}
+async function pushOff(){
+  try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+    if(sub){await SB.from('push_subs').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch(e){}
+  S.push={on:false};render();
+}
+async function pushHour(field,h){if(!S.push||!S.push.on)return;S.push[field]=h;try{await SB.from('push_subs').update({[field]:h}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
+function remindersCard(){
+  if(!ME.user||!pushReady())return '';
+  if(S.push===undefined){loadPush();return ''}
+  const hours=(f,v)=>`<label class="f">${f==='morning'?'Weigh-in nudge':'Workout nudge'}<select data-push="${f}">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===v?'selected':''}>${hourLabel(h)}</option>`).join('')}</select></label>`;
+  let h=`<div class="card"><h2>Reminders</h2>`;
+  if(S.push.on)h+=`<p class="muted" style="margin-top:0">On for this phone. You get a weigh-in nudge if you haven’t logged your weight, and a workout nudge if it’s a training day and nothing’s logged.</p>
+    <div class="grid2">${hours('morning',S.push.morning)}${hours('evening',S.push.evening)}</div><button class="small" data-act="pushoff" style="margin-top:10px">Turn off</button>`;
+  else h+=`<p class="muted" style="margin-top:0">Get a morning weigh-in nudge and an evening nudge on training days you haven’t logged. On an iPhone this works from the home-screen app.</p><button class="small primary" data-act="pushon">Turn on reminders</button>`;
+  if(S.pushMsg)h+=`<div class="err">${esc(S.pushMsg)}</div>`;
   return h+`</div>`;
 }
 

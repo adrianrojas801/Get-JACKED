@@ -3,3 +3,10 @@
 # Auth settings (sign-ups off, site URL, redirect URLs) are set by the workflow through
 # the Management API, so nothing here can overwrite them. Don't run `supabase config push`.
 project_id = "get-jacked"
+
+# Edge Functions. They are only deployed when the repo variable DEPLOY_FUNCTIONS is "true" (see README).
+[functions.food-estimate]
+verify_jwt = true   # signed-in people only
+
+[functions.send-reminders]
+verify_jwt = false  # called by the database's cron job, which proves itself with the x-cron-secret header instead

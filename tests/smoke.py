@@ -99,6 +99,9 @@ async def main():
               "Tabs come back after the intake")
 
         await page.click("button[data-act=quick]")
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(400)
+        check("snap or describe" not in (await page.inner_text(".sheet")).lower(), "Photo estimates stay hidden until they're set up")
+        await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
         await page.fill("input[data-day=weight]", "170.2"); await page.wait_for_timeout(1500)
         docs = await page.evaluate("JSON.stringify(window.__docs)")
         check("170.2" in docs and '"food":[{' in docs, "Quick-add food and weight save")
@@ -249,7 +252,16 @@ async def main():
               "Tapping a recent food logs it and updates the rings")
         check("sam finished push today" in (await page.inner_text("#app")).lower(), "Today shows that your friend trained")
 
-        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
+        await page.evaluate("sessionStorage.setItem('mockest','1')")
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(400)
+        check("snap or describe" in (await page.inner_text(".sheet")).lower(), "Photo estimates appear once the server function says it's ready")
+        await page.fill("#snaptxt", "3 tacos"); await page.click("button[data-act=snap]"); await page.wait_for_timeout(400)
+        sent = await page.evaluate("window.__lastEstimate")
+        check(await page.input_value("input[data-sn='0'][data-sf=n]") == "Test taco" and sent["note"] == "3 tacos" and "who" in sent and "prompt" not in sent,
+              "An estimate comes back for review; the app sends only the note and who is eating")
+        await page.click("button[data-act=snapadd]"); await page.wait_for_timeout(300)
+        check(any(f["n"] == "Test taco" and f["q"] == 3 for f in (await page.evaluate(f"window.__docs['days/{ago(0)}']"))["food"]),
+              "Adding the estimate logs it")
         sheet = (await page.inner_text(".sheet")).lower()
         check("all foods" in sheet and "recent" in sheet and "greek yogurt" in sheet, "All foods opens the full list as a sheet")
         await page.fill("#fsearch", "greek"); await page.wait_for_timeout(150)
@@ -375,6 +387,7 @@ async def main():
               "Turning sharing off removes you from the board")
         await page.click("button[data-act=stepnew]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
+        check("reminders" not in app.lower(), "Reminders stay hidden until the push key is set")
         check("Get Contents of URL" in app and "/rest/v1/rpc/log_steps" in await page.content() and "tok_" in await page.content(),
               "Automatic steps shows the Shortcut steps, URL and token")
         await page.click("button[data-act=stepdone]"); await page.wait_for_timeout(200)

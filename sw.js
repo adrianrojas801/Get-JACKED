@@ -13,6 +13,20 @@ self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
+// Reminders: show what the send-reminders function sent, and open the app when it's tapped.
+self.addEventListener('push', e => {
+  let msg = {};
+  try { msg = e.data ? e.data.json() : {}; } catch (err) { /* not JSON: fall back to the default text */ }
+  e.waitUntil(self.registration.showNotification(msg.title || 'Get Jacked', {
+    body: msg.body || '', icon: 'icons/icon-192.png?v=2', badge: 'icons/icon-192.png?v=2', data: { url: msg.url || './' },
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list =>
+    list.length ? list[0].focus() : self.clients.openWindow(e.notification.data.url)));
+});
+
 // Network first, so a new deploy shows up right away; the saved copy is the fallback.
 // Only this site's own GET requests are handled. Supabase calls always go straight to the network.
 self.addEventListener('fetch', e => {

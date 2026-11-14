@@ -68,6 +68,12 @@ window.supabase={createClient(){
       upload:async(path,blob)=>{if(offline())return fail();window.__lastUpload={path,type:blob&&blob.type,size:blob&&blob.size};__photos.push(path);return {data:{path},error:null}},
       createSignedUrls:async paths=>offline()?fail():{data:paths.map(()=>({signedUrl:'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='})),error:null},
       remove:async paths=>{if(offline())return fail();__photos=__photos.filter(p=>!paths.includes(p));return {data:[],error:null}}}}},
+    // Edge Functions. Photo estimates report "ready" only when sessionStorage.mockest is '1'.
+    functions:{invoke:async(name,{body})=>{__calls.push(['fn',name]);
+      if(offline())return {data:null,error:{message:'Failed to send a request to the Edge Function'}};
+      if(name!=='food-estimate')return {data:null,error:{message:'not found'}};
+      if(body.ping)return {data:{ready:sessionStorage.getItem('mockest')==='1'},error:null};
+      window.__lastEstimate=body;return {data:{items:[{n:'Test taco',c:150,p:9,q:3}],note:'Assumed corn tortillas.'},error:null}}},
     channel(){const c={on(){return c},subscribe(){return c}};return c}
   };
 }};

@@ -56,6 +56,14 @@ jobs:
       - name: Apply migrations
         run: supabase db push --yes --remote
 
+      # Off by default: it needs an access token that also has the Edge Functions permission.
+      # Turn it on by setting the repository variable DEPLOY_FUNCTIONS to true (README, "Optional features").
+      - name: Deploy Edge Functions (photo estimates, reminders)
+        if: ${{ vars.DEPLOY_FUNCTIONS == 'true' }}
+        run: |
+          supabase functions deploy food-estimate --project-ref "$PROJECT_ID"
+          supabase functions deploy send-reminders --project-ref "$PROJECT_ID"
+
       - name: Auth settings (sign-ups off, site URL, redirect URLs)
         run: |
           if [ -z "$SITE_URL" ]; then
