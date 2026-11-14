@@ -40,4 +40,10 @@ To change the database, add a new file to `supabase/migrations/` named `YYYYMMDD
 
 ## Adding a person
 
-Authentication → Users → Add user → Create new user (with Auto Confirm checked). Send them the link and their temporary password, and have them change it from the round account button in the top-right corner. The first time they sign in, a short set of questions builds their workout program and daily targets. They can edit both later under Plan.
+Authentication → Users → Add user → Create new user (with Auto Confirm checked). Send them the link and their temporary password, and have them change it from the round account button in the top-right corner. The first time they sign in, a short set of questions builds a standard workout program and daily targets, so they can start logging right away. They can edit both later under Plan.
+
+To give them a custom program:
+1. Their answers show up under **Intake requests** on your account page (tap your initial in the top-right corner).
+2. Tap **Copy for Claude**, paste it into Claude, and copy the program Claude writes.
+3. Tap **Send program**, paste it, and tap **Send**.
+4. Next time they open the app, they see "Your new program is ready" and tap **Use it**. Their logs stay.

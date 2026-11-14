@@ -46,6 +46,16 @@ jobs:
           python tests/check_sql.py | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+  db:
+    name: Database rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # ubuntu-latest comes with PostgreSQL installed (not running). The test starts a throwaway copy.
+      - name: Migrations re-run cleanly, RLS and functions behave
+        run: python3 tests/check_db.py
+
   smoke:
     name: Smoke test
     runs-on: ubuntu-latest
@@ -79,7 +89,7 @@ jobs:
   gate:
     name: Merge gate
     if: always()
-    needs: [syntax, sql, smoke, secrets]
+    needs: [syntax, sql, db, smoke, secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

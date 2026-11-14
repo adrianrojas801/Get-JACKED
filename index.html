@@ -198,6 +198,7 @@ body.signedout main,body.signedout nav,body.signedout #timer,body.signedout #sta
 #app .err{color:var(--bad);font-size:13px;min-height:1em;margin-top:8px}
 body.setup #nav{display:none}
 .intake-rest{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
 details.pday summary::-webkit-details-marker{display:none}
@@ -544,6 +545,7 @@ function viewToday(){
   const groups={};foodGroups().forEach(g=>{groups[g]=[]});presets().forEach((p,i)=>{(groups[p.g||'Other']=groups[p.g||'Other']||[]).push([p,i])});
   let h=`<div class="row between"><button data-act="day" data-v="-1">◀</button><b>${isToday?'Today · ':''}${nice(k)}</b><div class="row"><button data-act="day" data-v="1" ${isToday?'disabled style="visibility:hidden" aria-hidden="true"':''}>▶</button></div></div>`;
   if(!isToday)h+=`<div style="text-align:center"><button class="link" data-act="gotoday">Jump to today</button></div>`;
+  h+=newPlanCard();
   h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">Open workout</button>`}</div>${(()=>{const sv=num(d.steps)||0;return `<div class="row between" style="margin-top:10px"><span>Steps</span><span><b>${fmt(sv)}</b> / 10,000</span></div>${bar(sv,10000)}<div class="muted">${sv>=8000?'<span class="good">Step goal hit ✓</span>':fmt(8000-sv)+' to 8k'} · update it under Body &amp; habits</div>`})()}</div>`;
   const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
   h+=`<div class="card"><h2>Body & habits</h2><div class="grid2">
@@ -821,6 +823,7 @@ function genericFood(){
 function viewIntake(redo){
   const p=Object.assign({},cfg().profile||{});const dr=S.draft||{};
   const val=(id,k)=>esc(dr[id]!=null?dr[id]:(p[k]??''));
+  const ta=(id,label,ph,rows=2)=>`<label class="f">${label}<textarea id="${id}" rows="${rows}" maxlength="3000" placeholder="${esc(ph)}">${esc(dr[id]??'')}</textarea></label>`;
   const sel=(id,k,opts,def='')=>{const cur=dr[id]!=null?dr[id]:(p[k]??def);return `<select id="${id}">${opts.map(([v,l])=>`<option value="${v}" ${String(cur)===String(v)?'selected':''}>${esc(l)}</option>`).join('')}</select>`};
   return `<div class="card"><h2>${redo?'Rebuild your plan':'Let’s set up your plan'}</h2>
     <p class="muted">${redo?'This replaces your workout program and daily targets. Your logged workouts, food and weigh-ins stay.':'Answer a few questions and the app builds your workout program and daily targets for Planet Fitness. You can change any of it later under Plan.'}</p>
@@ -836,6 +839,14 @@ function viewIntake(redo){
       <label class="f">Activity outside the gym${sel('in_act','act',Object.entries(ACT).map(([k,v])=>[k,v[0]]),'low')}</label>
       <label class="f">Days a week you can lift${sel('in_days','days',[[3,'3 days'],[4,'4 days'],[5,'5 days'],[6,'6 days']],4)}</label>
       <label class="f">How long you’ve been lifting${sel('in_exp','exp',[['new','Less than a year'],['exp','A year or more']],'new')}</label></div>
+    <h3 style="margin:16px 0 4px">For a custom program</h3>
+    <p class="muted" style="margin:0 0 6px">${redo?'Optional. Fill these in to ask for a new custom program.':'You’ll start on a standard program right away. These answers go to the app’s admin so a program can be written just for you. Only these answers are shared, never your logs.'}</p>
+    <div class="intake-rest">
+      ${ta('in_routine','Your current routine','Each day: exercises, sets × reps and weight. Rough is fine, or paste from your notes.',5)}
+      ${ta('in_focus','What you want to improve','For example: bigger chest and arms, lose the gut, stronger legs')}
+      ${ta('in_injury','Injuries or anything that hurts','Leave blank if none')}
+      ${ta('in_when','Which days you can train, and for how long','For example: Mon–Fri after work, about an hour')}
+      ${ta('in_foods','Foods you eat a lot (optional)','For example: Chipotle bowl, eggs, protein shakes')}</div>
     <div class="err" id="in_err"></div>
     <div class="row wrap" style="margin-top:10px"><button class="primary" data-act="intake">${redo?'Rebuild my plan':'Build my plan'}</button>${redo?'<button data-act="redox">Cancel</button>':''}</div></div>`;
 }
@@ -850,8 +861,12 @@ function submitIntake(){
   if(!redo||!s.block)s.block=today();
   if(!Array.isArray(s.presets))s.presets=clone(STARTER_PRESETS);
   if(!Array.isArray(s.foodGroups))s.foodGroups=NEW_GROUPS.slice();
+  const ext={};for(const [id,k] of [['in_routine','routine'],['in_focus','focus'],['in_injury','injuries'],['in_when','when'],['in_foods','foods']]){const v=g(id).trim();if(v)ext[k]=v.slice(0,3000)}
+  const share=!redo||Object.keys(ext).length>0;
+  if(share)s.intakePending=Object.assign({name:(ME.profile&&ME.profile.display_name)||'',sex:p.sex,age:p.age,height:`${p.ft}'${p.inch}"`,weight:p.weight,goalWeight:t.goal,goal:GOALS[p.goal],activity:ACT[p.act][0],days:p.days,experience:p.exp==='new'?'Less than a year':'A year or more',targets:`${t.cal} cal, ${t.pro} g protein`},ext);
   delete s.swaps;putSettings(s);
-  S.redo=false;S.draft=null;S.wp=null;S.flash=`Your plan is ready: ${fmt(t.cal)} calories and ${t.pro} g protein a day, ${p.days} lifting days a week. Change anything under Plan.`;
+  if(share)sendIntake();
+  S.redo=false;S.draft=null;S.wp=null;S.flash=`Your plan is ready: ${fmt(t.cal)} calories and ${t.pro} g protein a day, ${p.days} lifting days a week. Change anything under Plan.`+(share?' Your answers were sent so a custom program can be written for you.':'');
   S.tab='today';render();window.scrollTo(0,0);
 }
 function viewProgramEditor(){
@@ -868,8 +883,136 @@ function viewProgramEditor(){
   h+=`<div class="row wrap" style="margin-top:10px"><button class="small" data-act="pdayadd">+ Add a day</button><button class="small" data-act="redo">Rebuild from questions</button></div></div>`;
   return h;
 }
+// ---------- intake requests (custom programs written outside the app) ----------
+// The person's answers go to public.intake_requests, the one place an admin can read anything of theirs.
+// The admin pastes a written program back; the person chooses to switch to it.
+async function sendIntake(){
+  const a=cfg().intakePending;if(!a||!SB)return false;
+  let error=null;try{({error}=await SB.from('intake_requests').insert({answers:a}))}catch(e){error=e}
+  if(error){S.reqSendMsg='Couldn’t send your answers. Check your connection and try again.';render();return false}
+  const s=clone(cfg());delete s.intakePending;putSettings(s);S.reqSendMsg='Sent ✓';render();return true;
+}
+function stripToJson(txt){const t=String(txt||'');const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)throw 'Paste the program text, starting with { and ending with }.';return JSON.parse(t.slice(a,b+1))}
+// Checks and cleans a written program before it's sent or applied. Throws a message for the admin.
+function normPlan(raw){
+  let x=raw;if(x&&x.days&&!x.program)x={program:x};
+  if(!x||typeof x!=='object'||!x.program||!x.program.days||typeof x.program.days!=='object'||Array.isArray(x.program.days))throw 'It needs a "program" with "days".';
+  const P=x.program,days={};
+  for(const [k,d] of Object.entries(P.days)){
+    if(!/^[A-Za-z0-9_-]{1,20}$/.test(k)||k==='rest')throw `"${k}" can’t be a day key. Use short letters or numbers, like "upA".`;
+    if(!d||!Array.isArray(d.ex)||!d.ex.length)throw `Day "${k}" needs an "ex" list of exercises.`;
+    days[k]={t:String(d.t||k).slice(0,40),ex:d.ex.slice(0,15).map((e,i)=>{
+      if(!e||!String(e.n||'').trim())throw `Day "${k}", exercise ${i+1} needs a name ("n").`;
+      const o={n:String(e.n).trim().slice(0,60),s:Math.max(1,Math.min(10,Math.round(num(e.s)||3))),r:String(e.r||'8-12').slice(0,12),rest:Math.max(0,Math.min(600,Math.round(num(e.rest)||90)))};
+      if(e.ss)o.ss=String(e.ss).slice(0,3);if(e.note)o.note=String(e.note).slice(0,300);return o})};
+  }
+  const keys=Object.keys(days);if(!keys.length)throw 'The program has no days.';if(keys.length>10)throw 'That’s more than 10 days.';
+  const order=(Array.isArray(P.order)?P.order:[]).filter((k,i,a)=>days[k]&&a.indexOf(k)===i);for(const k of keys)if(!order.includes(k))order.push(k);
+  if(!Array.isArray(P.sched)||P.sched.length!==7)throw '"sched" needs 7 entries, Sunday to Saturday.';
+  const sched=P.sched.map(v=>{if(v==='rest'||days[v])return v;throw `"sched" has "${v}", which isn’t one of the days.`});
+  const out={program:{days,order,sched}};
+  if(Array.isArray(x.presets))out.presets=x.presets.filter(q=>q&&String(q.n||'').trim()).slice(0,60).map(q=>({g:String(q.g||'Meals').slice(0,30),n:String(q.n).trim().slice(0,60),c:Math.max(0,Math.round(num(q.c)||0)),p:Math.max(0,Math.round((num(q.p)||0)*10)/10)}));
+  if(num(x.cal)>=1200&&num(x.cal)<=5000)out.cal=Math.round(num(x.cal));
+  if(num(x.pro)>=50&&num(x.pro)<=300)out.pro=Math.round(num(x.pro));
+  return out;
+}
+const PLAN_FORMAT=`{"program":{"days":{"upA":{"t":"Upper A","ex":[{"n":"Smith bench press","s":3,"r":"6-10","rest":150,"note":"optional tip"},{"n":"Cable curl","s":3,"r":"10-12","rest":45,"ss":"A"}]}},"order":["upA"],"sched":["rest","upA","rest","rest","rest","rest","rest"]},"presets":[{"g":"Meals","n":"Chipotle chicken bowl","c":650,"p":45}],"cal":2400,"pro":160}`;
+function reqPrompt(r,name){
+  const a=r.answers||{},line=(l,v)=>v!=null&&v!==''?`- ${l}: ${v}\n`:'';
+  return `Write a Get Jacked workout program for ${name||a.name||'this person'}, the same way you wrote Pablo’s: keep what works from their routine, fix what doesn’t, and fit their goal.
+
+About them
+${line('Sex',a.sex==='f'?'Female':a.sex==='m'?'Male':'')}${line('Age',a.age)}${line('Height',a.height)}${line('Weight',a.weight?a.weight+' lbs':'')}${line('Goal',a.goal)}${line('Goal weight',a.goalWeight?a.goalWeight+' lbs':'')}${line('Activity outside the gym',a.activity)}${line('Days a week they can lift',a.days)}${line('Lifting for',a.experience)}${line('Targets the app set',a.targets)}
+Current routine
+${a.routine||'(not given)'}
+
+What they want to improve
+${a.focus||'(not given)'}
+
+Injuries or anything that hurts
+${a.injuries||'None given'}
+
+When they can train
+${a.when||'(not given)'}
+
+Foods they eat a lot
+${a.foods||'(not given)'}
+
+Rules
+- Planet Fitness only: Smith machine, cable crossover, hack squat, leg press, dumbbells, machines. No free barbell rack.
+- Double progression: when every set hits the top of the rep range, add weight.
+- Most sets 0–2 reps short of failure. Isolation can go to failure; a drop set on the last isolation set is fine. Heavy Smith lifts stay 1–2 reps short.
+- Rest 2–3 min on compounds, at least 90 s on isolation. Supersets can rest less between the paired moves.
+- About 10–20 hard sets per muscle per week. Compounds first. No scheduled deloads.
+- Short notes only where they help (setup, what to log, when to go up).
+
+Reply with one JSON block in exactly this shape (ss = superset letter, optional; presets, cal and pro are optional; sched is Sunday to Saturday):
+${PLAN_FORMAT}`;
+}
+async function loadReqs(){
+  if(!SB||!(ME.profile&&ME.profile.is_admin))return;
+  S.reqErr=null;
+  try{
+    const [r,n]=await Promise.all([SB.from('intake_requests').select('id,user_id,answers,status,created_at').order('created_at',{ascending:false}).limit(50),SB.from('profiles').select('id,display_name')]);
+    if(r.error)throw r.error;S.reqs=r.data||[];S.reqNames={};for(const x of (n.data||[]))S.reqNames[x.id]=x.display_name;
+  }catch(e){S.reqErr='Couldn’t load requests. Tap Refresh to try again.'}
+  if(S.tab==='account')render();
+}
+async function sendPlan(id){
+  const box=$('#reqplan');let plan;
+  try{plan=normPlan(stripToJson(box&&box.value))}catch(e){S.reqMsg={id,t:'That program has a problem: '+(e&&e.message||e)};return render()}
+  S.reqDraft=box.value;
+  const {error}=await SB.rpc('send_intake_plan',{p_id:id,p_plan:plan});
+  if(error){S.reqMsg={id,t:'Couldn’t send it: '+(error.message||'try again.')};return render()}
+  S.reqMsg={id,t:'Sent ✓ They’ll see it next time they open the app.'};S.reqOpen=null;S.reqDraft='';loadReqs();
+}
+function viewRequests(){
+  if(!(ME.profile&&ME.profile.is_admin))return '';
+  if(S.reqs==null&&!S.reqErr){loadReqs();return `<div class="card"><h2>Intake requests</h2><div class="muted">Loading…</div></div>`}
+  const label={new:'New',sent:'Sent, waiting for them to switch',applied:'Using it ✓'};
+  let h=`<div class="card"><div class="row between"><h2 style="margin:0">Intake requests</h2><button class="small" data-act="reqload">Refresh</button></div>`;
+  if(S.reqErr)h+=`<div class="warn" style="margin-top:8px">${esc(S.reqErr)}</div>`;
+  else if(!S.reqs.length)h+=`<div class="muted" style="margin-top:8px">No requests yet. When someone finishes setup, their answers show up here.</div>`;
+  else h+=`<div class="muted" style="margin-top:6px">Tap <b>Copy for Claude</b>, paste it into Claude, then paste Claude’s program back with <b>Send program</b>.</div><ul class="list" style="margin-top:6px">`+S.reqs.map(r=>{
+    const nm=S.reqNames[r.user_id]||(r.answers&&r.answers.name)||'Someone',open=S.reqOpen===r.id,msg=S.reqMsg&&S.reqMsg.id===r.id?S.reqMsg.t:'';
+    return `<li style="flex-wrap:wrap"><div class="grow"><b>${esc(nm)}</b><div class="muted">${esc(new Date(r.created_at).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}))} · ${esc(label[r.status]||r.status)}</div></div>
+      <button class="small" data-act="reqcopy" data-id="${esc(r.id)}">${S.reqCopied===r.id?'Copied ✓':'Copy for Claude'}</button><button class="small${open?' primary':''}" data-act="reqopen" data-id="${esc(r.id)}">Send program</button>
+      ${S.reqCopyText&&S.reqCopyText.id===r.id?`<textarea readonly style="width:100%;height:120px;margin-top:6px">${esc(S.reqCopyText.t)}</textarea><div class="muted" style="width:100%">Couldn’t copy automatically. Select all and copy.</div>`:''}
+      ${open?`<div style="width:100%;margin-top:8px"><textarea id="reqplan" rows="6" placeholder="Paste the program Claude wrote">${esc(S.reqDraft||'')}</textarea><div class="row wrap" style="margin-top:6px"><button class="small primary" data-act="reqsend" data-id="${esc(r.id)}">Send to ${esc(nm)}</button><button class="small" data-act="reqopen" data-id="${esc(r.id)}">Cancel</button></div></div>`:''}
+      ${msg?`<div class="${/^Sent/.test(msg)?'good':'warn'}" style="width:100%;margin-top:6px">${esc(msg)}</div>`:''}</li>`}).join('')+`</ul>`;
+  return h+`</div>`;
+}
+function pendingCard(){
+  if(!cfg().intakePending)return '';
+  return `<div class="card"><h2>Setup answers</h2><p class="muted">Your answers for a custom program haven’t been sent yet.</p><div class="row wrap"><button class="small primary" data-act="reqresend">Send now</button><span class="muted">${esc(S.reqSendMsg||'')}</span></div></div>`;
+}
+// The person's side: is a written program waiting for them?
+async function checkPlan(){
+  if(!SB||!ME.user)return;
+  try{const {data,error}=await SB.from('intake_requests').select('id,plan,status').eq('user_id',ME.user.id).eq('status','sent').order('created_at',{ascending:false}).limit(1);
+    if(error)return;const r=data&&data[0];let ok=null;if(r){try{ok={id:r.id,plan:normPlan(r.plan)}}catch(e){}}
+    const had=!!S.newPlan;S.newPlan=ok;if(had!==!!ok)softRender();
+  }catch(e){}
+}
+function newPlanCard(){
+  const np=S.newPlan;if(!np||(S.planLater&&S.tab==='today'))return '';
+  const P=np.plan.program,days=P.order.map(k=>P.days[k].t);
+  return `<div class="card newplan"><h2>Your new program is ready</h2><p>${days.length} days: ${esc(days.join(', '))}.</p><p class="muted">Switching replaces your current program${np.plan.cal||np.plan.pro?' and targets':''}. Your logged workouts, food and weigh-ins stay.</p><div class="row wrap"><button class="primary" data-act="planuse">Use it</button>${S.tab==='today'?'<button data-act="planlater">Not now</button>':''}</div></div>`;
+}
+async function applyPlan(){
+  const np=S.newPlan;if(!np)return;
+  const s=clone(cfg());s.program=clone(np.plan.program);
+  if(np.plan.presets&&np.plan.presets.length){const ps=Array.isArray(s.presets)?s.presets:clone(presets());for(const q of np.plan.presets)if(!ps.some(y=>y.n===q.n))ps.push(q);s.presets=ps;
+    const gs=Array.isArray(s.foodGroups)?s.foodGroups:foodGroups().slice();for(const q of np.plan.presets)if(!gs.includes(q.g))gs.push(q.g);s.foodGroups=gs}
+  if(np.plan.cal)s.cal=np.plan.cal;if(np.plan.pro)s.pro=np.plan.pro;
+  putSettings(s);S.newPlan=null;S.wp=null;S.flash='You’re on your new program. You can still change it under Plan.';render();window.scrollTo(0,0);
+  try{await SB.rpc('mark_intake_applied',{p_id:np.id})}catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.loaded){checkPlan();if(S.tab==='account')loadReqs()}});
 function viewAccount(){
   let h=`<div class="backrow"><button class="small" data-act="meback">← Back</button></div>`;
+  h+=viewRequests();
+  h+=pendingCard();
   h+=accountUI();
   h+=`<div class="card"><h2>Backup</h2><p class="muted">Your data saves to your account automatically. This copies all of it as text, if you ever want a backup.</p><button class="small" data-act="copy">${S.copied?'Copied ✓':'Copy all data'}</button>${S.copyText?`<textarea readonly style="margin-top:8px;height:120px">${esc(S.copyText)}</textarea>`:''}</div>`;
   return h;
@@ -884,7 +1027,7 @@ function viewPlan(){
     <label class="f">Block start date<input type="date" data-set="block" value="${t.block||''}"></label></div>
     <div class="row wrap" style="margin-top:8px"><button class="small" data-act="newblock">Start new 8-week block today</button><span class="muted">${bw?'Currently week '+bw+' of 8':'No block started'}</span></div>
     <ul class="plain muted" style="margin-top:8px">${goalNotes()}</ul></div>`;
-  h+=viewProgramEditor();
+  h+=newPlanCard()+viewProgramEditor();
   h+=`<div class="card"><h2>Rules</h2><ul class="plain">
     <li>Keep the same main lifts for 6–8 weeks. Only swap isolation moves.</li>
     <li><b>Double progression:</b> once you hit the top of the rep range on every set, add weight (+5 lbs, or the next dumbbell up).</li>
@@ -922,7 +1065,7 @@ function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
 function meBadge(){const b=$('#me');if(!b)return;const n=((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email)||'').trim();b.textContent=n?n[0]:'?';b.classList.toggle('on',S.tab==='account')}
-function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account'}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
+function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account';S.reqs=null;S.reqMsg=null}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
 $('#me').addEventListener('click',toggleAccount);
 function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&$('#app').contains(a)){S.needRender=true;return}render()}
 document.addEventListener('focusout',()=>setTimeout(()=>{if(S.needRender){const a=document.activeElement;if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render()}},50));
@@ -934,6 +1077,7 @@ app.addEventListener('input',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='snaptxt'){S.snapTxt=el.value;return}
   if(el.id&&el.id.startsWith('in_')){S.draft=Object.assign({},S.draft,{[el.id]:el.value});return}
+  if(el.id==='reqplan'){S.reqDraft=el.value;return}
   if(ds.sched!=null){const s=clone(cfg());if(!s.program)return;s.program.sched[+ds.sched]=el.value;putSettings(s);render();return}
   if(ds.pd!=null){const s=clone(cfg());const d=s.program&&s.program.days[ds.pd];if(!d)return;S.openDay=ds.pd;
     if(ds.pe==null)d.t=el.value;
@@ -965,6 +1109,14 @@ app.addEventListener('click',e=>{
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
   else if(act==='intake')submitIntake();
   else if(act==='meback')toggleAccount();
+  else if(act==='reqload'){S.reqs=null;S.reqErr=null;render()}
+  else if(act==='reqopen'){const id=ds.id;if(S.reqOpen===id){S.reqOpen=null}else{S.reqOpen=id;S.reqDraft=''}S.reqMsg=null;render();if(S.reqOpen){const t=$('#reqplan');if(t)t.focus()}}
+  else if(act==='reqsend')sendPlan(ds.id);
+  else if(act==='reqcopy'){const r=(S.reqs||[]).find(x=>x.id===ds.id);if(!r)return;const txt=reqPrompt(r,S.reqNames[r.user_id]);S.reqCopyText=null;
+    Promise.resolve().then(()=>navigator.clipboard.writeText(txt)).then(()=>{S.reqCopied=r.id;render();setTimeout(()=>{S.reqCopied=null;render()},2500)}).catch(()=>{S.reqCopyText={id:r.id,t:txt};render()})}
+  else if(act==='reqresend'){S.reqSendMsg='Sending…';render();sendIntake()}
+  else if(act==='planuse')applyPlan();
+  else if(act==='planlater'){S.planLater=true;render()}
   else if(act==='redo'){S.redo=true;S.draft=null;render();window.scrollTo(0,0)}
   else if(act==='redox'){S.redo=false;S.draft=null;render()}
   else if(act==='pexmv'||act==='pexdel'||act==='pexadd'){const s=clone(cfg());const d=s.program&&s.program.days[ds.k];if(!d)return;S.openDay=ds.k;
@@ -1133,7 +1285,7 @@ async function start(){
   S.sample=null;S.boot=false;
   const db=makeDb(ME.user.id);S.db=db;render();
   const timer=setTimeout(()=>{if(!S.loaded){S.timedOut=true;S.note='Still connecting, so some saved data may be missing. Check your connection; it will fill in once it connects.';setStatus('Connecting…');render()}},10000);
-  const got=k=>{S.ready[k]=true;if(!S.loaded&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;setStatus('Saved ✓');render();return true}return false};
+  const got=k=>{S.ready[k]=true;if(!S.loaded&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;setStatus('Saved ✓');render();checkPlan();return true}return false};
   db.collection('days').onSnapshot(s=>{const ch=applySnap(s,'days',S.days);if(!got('days')&&ch)softRender()},onErr);
   db.collection('workouts').onSnapshot(s=>{const ch=applySnap(s,'workouts',S.workouts);if(!got('workouts')&&ch)softRender()},onErr);
   db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.known['settings/main']=true;let ch=false;if(!pending['settings/main']){const v=s.exists?s.data():{};if(JSON.stringify(v)!==JSON.stringify(S.settings)){S.settings=clone(v);ch=true}}if(!got('settings')&&ch)softRender()},onErr);

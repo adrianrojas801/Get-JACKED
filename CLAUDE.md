@@ -35,7 +35,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 | `manifest.webmanifest`, `icons/` | PWA name, colors and icons |
 | `supabase/migrations/` | All schema changes, as `YYYYMMDDHHMMSS_short_name.sql` (`20261113000000_init.sql` is the base) |
 | `supabase/config.toml` | Minimal CLI project file. Never run `supabase config push`: auth settings are managed by the Deploy workflow. |
-| `tests/` | `check_syntax.js`, `check_sql.py`, `smoke.py` with `mock-supabase.js` |
+| `tests/` | `check_syntax.js`, `check_sql.py`, `check_db.py` (with `db/supabase_shim.sql`), `smoke.py` with `mock-supabase.js` |
 | `.github/workflows/` | `ci.yml` (every PR and `main`), `deploy.yml` (Supabase migrations and auth settings after CI passes on `main`) and `labeler.yml` (path labels on PRs) |
 | `.github/labeler.yml` | Which paths get the `app`, `database`, `ci` and `docs` labels |
 | `README.md` | Human setup guide |
@@ -45,6 +45,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Single-file app, no framework, no build step.** Don't add a bundler, framework or npm dependencies unless the owner asks. External network calls go only to Supabase.
 - **Data adapter:** `makeDb(uid)` in `index.html` makes Supabase look like the document store the UI was written for: `doc(path).get/set/update/onSnapshot` and `collection(name).onSnapshot`. Paths are `days/<YYYY-MM-DD>`, `workouts/<date>_<prog>` and `settings/main`. Keep the UI talking to this interface, not to Supabase directly.
 - **Per-person programs:** each person's program lives in `settings/main` as `program = {days:{key:{t, ex:[{n,s,r,rest,ss?,note?}]}}, order, sched}` (`sched` is Sun–Sat, a day key or `'rest'`). Read it through `PROG()`, `dayOf()`, `titleOf()` and `schedOn()`, never a hard-coded program. New people get one from the intake form (`calcTargets` + `buildProgram`). `LEGACY_PROGRAM` is the owner's original program and is only used once by `ensureProgram()` to move him over (`settings.legacy = true` keeps his personal notes, food groups and cheat sheet). Never show legacy-only content to anyone else.
+- **Custom programs:** the intake also sends open-ended answers to `intake_requests`. The admin's Account page lists them, **Copy for Claude** builds a prompt (`reqPrompt`) with the answers, the training rules and the JSON format (`PLAN_FORMAT`), and **Send program** checks the pasted JSON with `normPlan()` before sending. The person gets a "new program is ready" card and chooses **Use it**. Keep `reqPrompt`'s rules in line with the product rules below.
 - **Writes:** `set` means a full upsert. `update` means the `patch_doc` RPC (a top-level `jsonb ||` merge). Field-level edits must use the patch path so two devices don't overwrite each other.
 - **Save pipeline:** `save()` / `flush()` / `pending{}` writes taps instantly, debounces typing by about 700 ms, writes one document at a time, retries once on `unavailable`, flushes on `pagehide`/`visibilitychange`, and shows "Not saved yet…" after 5 seconds. Snapshots for docs with pending writes are skipped. Don't regress any of this.
 - **Loading:** show "Loading your data…" until days, workouts and settings have all arrived. Never render an empty Today screen that looks like lost data.
@@ -54,6 +55,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 
 - **Every new table gets RLS turned on in the same migration.** "Automatically expose new tables" is turned off on this project, so add explicit `grant`s to `authenticated` only. Never grant to `anon`.
 - `docs` is private per user (`user_id = auth.uid()`). **Admins must not be able to read other people's docs.** Anything shared between users, such as leaderboards, goes in a separate, read-only summary table or view that holds only what's meant to be shared.
+- `intake_requests` is the one place an admin can read anything about another person: the setup answers they chose to send. Admins send a written program back only through `send_intake_plan()`, and the person applies it themselves (`mark_intake_applied()`). Never give admins a way to write into someone's `docs`.
 - `profiles.is_admin` can only be set from SQL. Never let the client write it (`display_name` has its own column-level grant).
 - `security definer` functions must pin `search_path` and revoke execute from `public` and `anon`.
 - **Secrets:** only the publishable key goes in the repo. The secret / `service_role` key, the database password and any API keys (Anthropic, etc.) never go in the repo or client code. Server-side secrets live in Supabase Edge Function secrets or Vercel environment variables.
@@ -65,11 +67,13 @@ CI (`.github/workflows/ci.yml`) runs these on every PR. Run them locally before 
 
 ```bash
 node tests/check_syntax.js     # inline <script> + config.js syntax
-python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, file naming
+python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, definer functions locked down, naming
+python3 tests/check_db.py      # runs migrations twice on a local Postgres and checks who can read/write what
 python3 tests/smoke.py         # headless sign-in, intake, editor, save, reload (mocked Supabase)
 ```
 
 - `main`'s ruleset requires one check: **Merge gate**, which passes only when every other CI job passed. When you add a CI job, add it to the gate's `needs:` list, or it won't block merging.
+- When you add a table, policy or function, **extend `tests/check_db.py`** to prove who can and can't use it.
 - When you add a feature, **extend `tests/smoke.py`** (and `tests/mock-supabase.js` if you need new Supabase calls) to cover it.
 - Migrations must be re-runnable (`if not exists`, `drop policy if exists`) and must never be edited after they've been merged. Add a new file instead.
 - Put what was tested, and what wasn't, in the PR's Testing section.

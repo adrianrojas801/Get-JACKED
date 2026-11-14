@@ -78,7 +78,11 @@ async def main():
         await page.fill("#in_ft", "5"); await page.fill("#in_inch", "10"); await page.fill("#in_wt", "170")
         await page.select_option("#in_goal", "cut"); await page.select_option("#in_act", "low")
         await page.select_option("#in_days", "4"); await page.select_option("#in_exp", "new")
+        await page.fill("#in_routine", "Mon: bench 3x8 at 185, rows 3x10"); await page.fill("#in_focus", "Bigger chest")
         await page.click("button[data-act=intake]"); await page.wait_for_timeout(300)
+        reqs = await page.evaluate("window.__reqs")
+        check(len(reqs) == 1 and reqs[0]["answers"]["routine"].startswith("Mon: bench") and reqs[0]["answers"]["goal"]
+              and "intakePending" not in await settings(page), "Intake answers are sent as a request")
         s = await settings(page)
         prog = s.get("program", {})
         check(len(prog.get("order", [])) == 4 and prog["sched"][1] == "upA"
@@ -119,10 +123,40 @@ async def main():
         app = await page.inner_text("#app")
         check((await page.inner_text("#me")).upper() == "P" and "Sign out" in app and "Copy all data" in app,
               "Header button opens Account & data (account, backup)")
+        await page.wait_for_timeout(200)
+        app = await page.inner_text("#app")
+        check("intake requests" in app.lower() and "pablo" in app and "· New" in app, "Admin sees the intake request")
+        prompt = await page.evaluate("reqPrompt(window.__reqs[0], 'pablo')")
+        check("Mon: bench 3x8 at 185" in prompt and "Bigger chest" in prompt and "Planet Fitness" in prompt
+              and '"sched"' in prompt, "Copy for Claude includes the answers, the rules and the format")
+        await page.click("button[data-act=reqcopy]"); await page.wait_for_timeout(300)
+        app = await page.inner_text("#app")
+        check("Copied ✓" in app or "Couldn’t copy automatically" in app, "Copy for Claude copies, or shows the text to copy")
+        await page.click("button[data-act=reqopen]"); await page.fill("#reqplan", "here you go: not a program")
+        await page.click("button[data-act=reqsend]"); await page.wait_for_timeout(200)
+        check("has a problem" in await page.inner_text("#app") and (await page.evaluate("window.__reqs"))[0]["status"] == "new",
+              "A bad program is rejected with a message")
+        plan = {"program": {"days": {"a": {"t": "Chest day", "ex": [{"n": "Incline Smith press", "s": 4, "r": "6-10", "rest": 150}]},
+                                     "b": {"t": "Leg day", "ex": [{"n": "Hack squat", "s": 3, "r": "8-12", "rest": 180}]}},
+                            "order": ["a", "b"], "sched": ["rest", "a", "b", "rest", "a", "b", "rest"]},
+                "presets": [{"g": "Meals", "n": "Chipotle bowl", "c": 650, "p": 45}], "cal": 2300}
+        await page.fill("#reqplan", "Here it is:\n```json\n" + json.dumps(plan) + "\n```")
+        await page.click("button[data-act=reqsend]"); await page.wait_for_timeout(300)
+        reqs = await page.evaluate("window.__reqs")
+        check(reqs[0]["status"] == "sent" and reqs[0]["plan"]["program"]["order"] == ["a", "b"] and "Sent ✓" in await page.inner_text("#app"),
+              "Admin sends a program back (pasted with extra text around it)")
 
         await page.reload(); await page.wait_for_timeout(800)
         check(not await page.evaluate("document.body.classList.contains('signedout')"), "Stays signed in after reload")
         check("set up your plan" not in (await page.inner_text("#app")).lower(), "No intake again after reload")
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(300)
+        check("new program is ready" in (await page.inner_text("#app")).lower(), "The person sees their new program waiting")
+        await page.click("button[data-act=planuse]"); await page.wait_for_timeout(400)
+        s = await settings(page)
+        check(s["program"]["order"] == ["a", "b"] and s["cal"] == 2300 and any(x["n"] == "Chipotle bowl" for x in s["presets"])
+              and (await page.evaluate("window.__reqs"))[0]["status"] == "applied"
+              and "new program is ready" not in (await page.inner_text("#app")).lower(),
+              "Use it switches the program, targets and foods, and marks it applied")
 
         await page.click("#me"); await page.wait_for_timeout(150)
         await page.click("#me"); await page.wait_for_timeout(150)
@@ -147,6 +181,19 @@ async def main():
               "Saved 'Always' swaps carry over into the program")
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)
         check("pozole" in (await page.inner_text("#app")).lower(), "Pablo keeps his own food cheat sheet")
+        await page.evaluate("window.__failInsert = true")
+        await page.click("button[data-act=redo]"); await page.wait_for_timeout(200)
+        await page.select_option("#in_sex", "m"); await page.fill("#in_age", "23"); await page.fill("#in_ft", "5")
+        await page.fill("#in_inch", "8"); await page.fill("#in_wt", "165"); await page.select_option("#in_goal", "bulk")
+        await page.fill("#in_focus", "Upper chest and side delts")
+        await page.click("button[data-act=intake]"); await page.wait_for_timeout(300)
+        check("intakePending" in await settings(page), "If sending fails, the answers are kept to send later")
+        await page.evaluate("window.__failInsert = false")
+        await page.click("#me"); await page.wait_for_timeout(300)
+        await page.click("button[data-act=reqresend]"); await page.wait_for_timeout(300)
+        reqs = await page.evaluate("window.__reqs")
+        check(len(reqs) == 1 and reqs[0]["answers"]["focus"] == "Upper chest and side delts" and "intakePending" not in await settings(page),
+              "Send now delivers them from the account page")
         await browser.close()
     write_summary(errors)
     if errors:
