@@ -277,6 +277,23 @@ async def main():
         check("Automatic steps are on" in await page.inner_text("#app"), "Automatic steps shows as on afterwards")
         await page.click("button[data-act=stepoff]"); await page.wait_for_timeout(300)
         check("set up automatic steps" in (await page.inner_text("#app")).lower(), "Automatic steps can be turned off")
+
+        # ---- no signal ----
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(200)
+        await page.evaluate("sessionStorage.setItem('mockoffline','1')")
+        await page.fill("input[data-day=weight]", "172.4"); await page.wait_for_timeout(1800)
+        today_doc = f"window.__docs['days/{ago(0)}']||{{}}"
+        check("Offline" in await page.inner_text("#status") and (await page.evaluate(today_doc)).get("weight") != 172.4
+              and "couldn’t save" not in (await page.inner_text("#app")).lower(), "With no signal, a change is kept on the phone without an error")
+        await page.reload(); await page.wait_for_timeout(900)
+        check(not await page.evaluate("document.body.classList.contains('signedout')")
+              and await page.input_value("input[data-day=weight]") == "172.4" and await page.locator("#hero .ring").count() == 3,
+              "The app reopens with no signal, showing your data and the unsent change")
+        await page.evaluate("sessionStorage.removeItem('mockoffline'); window.dispatchEvent(new Event('online'))")
+        await page.wait_for_timeout(5500)
+        doc = await page.evaluate(today_doc)
+        check(doc.get("weight") == 172.4 and doc.get("food") and "Saved" in await page.inner_text("#status"),
+              "Back online, the change is sent and nothing else in that day is lost")
         await browser.close()
     write_summary(errors)
     if errors:

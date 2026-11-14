@@ -452,7 +452,7 @@ function save(path,data,delay=0,patch=null){
   p.data=clone(data);p.dirty=true;p.since=p.since||Date.now();
   if(patch&&!p.full)p.patch=Object.assign(p.patch||{},clone(patch));else{p.full=true;p.patch=null}
   clearTimeout(p.timer);p.timer=setTimeout(()=>flush(path),delay);
-  setStatus('Saving…');
+  setStatus('Saving…');keepOutbox();keepCopy();
 }
 function mapFor(path){const c=path.split('/')[0];return c==='days'?S.days:c==='workouts'?S.workouts:null}
 async function writeDoc(path,data,patch){
@@ -467,16 +467,41 @@ async function flush(path){
   const p=pending[path];if(!p||!p.dirty)return;
   if(p.inflight){p.again=true;return}
   clearTimeout(p.timer);
-  p.inflight=true;p.dirty=false;const data=p.data,patch=p.full?null:p.patch;p.patch=null;p.full=false;let ok=true;
+  p.inflight=true;p.dirty=false;p.held=false;const data=p.data,patch=p.full?null:p.patch;p.patch=null;p.full=false;let err=null;
   try{await writeDoc(path,data,patch)}
-  catch(e){
-    if(e&&e.code==='unavailable'){await sleep(700+Math.random()*900);try{await writeDoc(path,data,patch)}catch(e2){ok=false;fail(e2)}}
-    else{ok=false;fail(e)}
-  }
+  catch(e){err=e;
+    if(e&&e.code==='unavailable'){await sleep(700+Math.random()*900);try{await writeDoc(path,data,patch);err=null}catch(e2){err=e2}}}
   p.inflight=false;
+  if(err&&err.code==='offline')return hold(path,p,patch);
+  if(err)fail(err);
   if(p.dirty||p.again){p.again=false;flush(path)}
-  else{delete pending[path];if(ok){refresh(path);if(!Object.keys(pending).length){setStatus('Saved ✓');queueBoard()}}}
+  else{delete pending[path];keepOutbox();if(!err){refresh(path);if(!Object.keys(pending).length){setStatus('Saved ✓');queueBoard()}}}
 }
+// No connection: keep the write (it's also stored on the phone) and try again later or when the phone is back online.
+function hold(path,p,patch){
+  if(patch&&!p.full)p.patch=Object.assign({},patch,p.patch||{});else{p.full=true;p.patch=null}
+  p.dirty=true;p.again=false;p.held=true;setStatus(OFFLINE_SAVED);
+  clearTimeout(p.timer);p.timer=setTimeout(()=>flush(path),20000);
+}
+
+// ---------- offline copy ----------
+// The last synced data and any writes still waiting are kept in localStorage, per person,
+// so the app opens and logs with no signal. Supabase stays the source of truth: whatever it sends replaces the copy.
+const OFFLINE_SAVED='Offline · saved on this phone';
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const lsKey=n=>'gj_'+n+'_'+(ME.user?ME.user.id:'');
+function keepCopy(){if(!ME.user||!S.loaded)return;clearTimeout(keepCopy.t);keepCopy.t=setTimeout(()=>LS.set(lsKey('copy'),{days:S.days,workouts:S.workouts,settings:S.settings,profile:ME.profile}),800)}
+function keepOutbox(){if(!ME.user)return;const out={};for(const [k,p] of Object.entries(pending))out[k]={data:p.data,patch:p.patch,full:!!p.full};if(Object.keys(out).length)LS.set(lsKey('out'),out);else LS.del(lsKey('out'))}
+// Opens from the copy on the phone, if there is one, and lines up any writes that never got sent.
+function openCopy(){
+  const c=LS.get(lsKey('copy'));if(!c||!c.settings)return false;
+  S.days=c.days||{};S.workouts=c.workouts||{};S.settings=c.settings;if(!ME.profile)ME.profile=c.profile||null;S.loaded=true;
+  const out=LS.get(lsKey('out'))||{};
+  for(const [path,o] of Object.entries(out)){const m=mapFor(path),id=path.split('/')[1];if(m)m[id]=clone(o.data);else if(path==='settings/main')S.settings=clone(o.data);
+    save(path,o.data,2500,o.full?null:o.patch)}
+  return true;
+}
+function forgetCopy(){LS.del(lsKey('copy'));LS.del(lsKey('out'));LS.del('gj_last')}
 function flushAll(){for(const k of Object.keys(pending))flush(k)}
 function fail(e){
   const c=e&&e.code;
@@ -489,9 +514,10 @@ function fail(e){
 document.addEventListener('visibilitychange',()=>flushAll());
 // Say so when the phone is offline, and send anything waiting as soon as it's back.
 window.addEventListener('offline',()=>setStatus('Offline'));
-window.addEventListener('online',()=>{if(Object.keys(pending).length){setStatus('Saving…');flushAll()}else setStatus('Saved ✓')});
+// Coming back online: the data layer refetches first (so edits merge instead of overwriting), then waiting writes go out.
+window.addEventListener('online',()=>{if(Object.keys(pending).length){setStatus('Saving…');setTimeout(flushAll,1500)}else setStatus('Saved ✓')});
 window.addEventListener('pagehide',()=>flushAll());
-setInterval(()=>{const old=Object.values(pending).some(p=>p.since&&Date.now()-p.since>5000);if(old)setStatus('Not saved yet…');},2000);
+setInterval(()=>{const ps=Object.values(pending);if(ps.some(p=>p.held))return;if(ps.some(p=>p.since&&Date.now()-p.since>5000))setStatus('Not saved yet…')},2000);
 
 // ---------- data access ----------
 function dayDoc(k){return S.days[k]?clone(S.days[k]):{date:k,food:[]}}
@@ -1542,7 +1568,8 @@ const SB=(window.supabase&&CFG.url&&CFG.key)?window.supabase.createClient(CFG.ur
 const AUTH_HASH=location.hash||'';
 const NEEDS_PW=/type=(invite|recovery)/.test(AUTH_HASH);
 const ME={user:null,profile:null};
-function dbErr(e){const st=e&&(e.status||e.code);if(st===401||st==='401'||st==='PGRST301'||st==='42501')return {code:'invalid_argument',message:String(e.message||e)};return {code:'unavailable',message:String((e&&e.message)||e)}}
+function dbErr(e){const st=e&&(e.status||e.code);if(st===401||st==='401'||st==='PGRST301'||st==='42501')return {code:'invalid_argument',message:String(e.message||e)};
+  const msg=String((e&&e.message)||e);return {code:navigator.onLine===false||/failed to fetch|networkerror|load failed|network request failed/i.test(msg)?'offline':'unavailable',message:msg}}
 function makeDb(uid){
   const L={days:[],workouts:[],settings:[]},timers={};
   const snapOf=rows=>{const docs=rows.map(r=>({id:r.id,exists:true,data:()=>r.data,metadata:{fromCache:false,hasPendingWrites:false}}));return {docs,size:docs.length,empty:!docs.length,metadata:{fromCache:false,hasPendingWrites:false},docChanges:()=>[]}};
@@ -1582,7 +1609,7 @@ function accountUI(){
 }
 async function saveName(){const v=($('#acname').value||'').trim().slice(0,40);const {error}=await SB.from('profiles').update({display_name:v}).eq('id',ME.user.id);S.nameMsg=error?'Couldn’t save the name.':'Saved ✓';if(!error&&ME.profile)ME.profile.display_name=v;render()}
 async function changePassword(){const v=$('#acpw').value||'';if(v.length<8){S.pwMsg='Use at least 8 characters.';return render()}const {error}=await SB.auth.updateUser({password:v});S.pwMsg=error?(error.message||'Couldn’t change it.'):'Password changed ✓';render()}
-async function signOut(){flushAll();await sleep(300);try{await SB.auth.signOut()}catch(e){}location.replace(location.pathname)}
+async function signOut(){flushAll();await sleep(300);forgetCopy();try{await SB.auth.signOut()}catch(e){}location.replace(location.pathname)}
 
 // ---------- automatic steps (an iOS Shortcut posts to log_steps with a personal token) ----------
 async function loadStepLink(){try{const {data}=await SB.from('step_tokens').select('created_at,last_used').maybeSingle();S.stepLink=data||false}catch(e){S.stepLink=false}if(S.tab==='account')softRender()}
@@ -1650,25 +1677,31 @@ function authScreen(mode,msg){
 
 // ---------- load ----------
 function applySnap(snap,col,map){let ch=false;for(const d of snap.docs){S.known[col+'/'+d.id]=true;if(pending[col+'/'+d.id])continue;const s=JSON.stringify(d.data());if(JSON.stringify(map[d.id])!==s){map[d.id]=JSON.parse(s);ch=true}}return ch}
-function onErr(e){S.note='Lost the connection to your saved data. It will retry when the app comes back into view.';setStatus('Offline');render()}
+function onErr(e){if(S.loaded&&e&&e.code==='offline'){setStatus(Object.keys(pending).length?OFFLINE_SAVED:'Offline');return}S.note='Lost the connection to your saved data. It will retry when the app comes back into view.';setStatus('Offline');render()}
 let STARTED=false;
 async function start(){
   if(STARTED)return;
-  const {data:{session}}=await SB.auth.getSession();
-  if(!session){S.boot=false;return authScreen('login')}
+  let session=null,netErr=false;
+  try{const r=await SB.auth.getSession();session=r.data&&r.data.session;netErr=!!r.error&&/fetch|network/i.test((r.error.name||'')+(r.error.message||''))}catch(e){netErr=true}
+  // With no signal the sign-in can't be refreshed. If this phone was signed in, open its saved copy; nothing sends until it's back online.
+  const user=session?session.user:((navigator.onLine===false||netErr)?LS.get('gj_last'):null);
+  if(!user){S.boot=false;return authScreen('login')}
   if(NEEDS_PW&&!S.pwDone){S.pwDone=true;return authScreen('setpw')}
   STARTED=true;
   document.body.classList.remove('signedout');$('#auth').innerHTML='';
-  ME.user=session.user;
-  try{const {data}=await SB.from('profiles').select('display_name,is_admin').eq('id',ME.user.id).maybeSingle();ME.profile=data||null}catch(e){}
+  ME.user=user;LS.set('gj_last',{id:user.id,email:user.email});
   S.sample=null;S.boot=false;
-  const db=makeDb(ME.user.id);S.db=db;render();
+  const db=makeDb(ME.user.id);S.db=db;
+  if(openCopy())setStatus(navigator.onLine===false?'Offline':'Syncing…');
+  render();
+  SB.from('profiles').select('display_name,is_admin').eq('id',ME.user.id).maybeSingle().then(({data})=>{if(data){ME.profile=data;keepCopy();meBadge()}},()=>{});
   const timer=setTimeout(()=>{if(!S.loaded){S.timedOut=true;S.note='Still connecting, so some saved data may be missing. Check your connection; it will fill in once it connects.';setStatus('Connecting…');render()}},10000);
-  const got=k=>{S.ready[k]=true;if(!S.loaded&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;setStatus('Saved ✓');render();checkPlan();queueBoard();return true}return false};
+  const got=k=>{S.ready[k]=true;keepCopy();if(!S.synced&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.synced=S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;if(!Object.keys(pending).length)setStatus('Saved ✓');keepCopy();render();checkPlan();queueBoard();return true}return false};
   db.collection('days').onSnapshot(s=>{const ch=applySnap(s,'days',S.days);if(!got('days')&&ch)softRender()},onErr);
   db.collection('workouts').onSnapshot(s=>{const ch=applySnap(s,'workouts',S.workouts);if(!got('workouts')&&ch)softRender()},onErr);
   db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.known['settings/main']=true;let ch=false;if(!pending['settings/main']){const v=s.exists?s.data():{};if(JSON.stringify(v)!==JSON.stringify(S.settings)){S.settings=clone(v);ch=true}}if(!got('settings')&&ch)softRender()},onErr);
 }
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
 render();
 if(!SB){S.boot=false;S.note='App isn’t configured: check config.js.';render()}
 else{

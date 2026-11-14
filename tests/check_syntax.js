@@ -6,5 +6,7 @@ if (!blocks.length) { console.error('No inline <script> found in index.html'); p
 blocks.forEach((code, i) => {
   try { new Function(code); } catch (e) { console.error(`index.html script #${i + 1}: ${e.message}`); process.exit(1); }
 });
-try { new Function(fs.readFileSync('config.js', 'utf8')); } catch (e) { console.error(`config.js: ${e.message}`); process.exit(1); }
-console.log(`Syntax OK (${blocks.length} inline script block(s) + config.js)`);
+for (const f of ['config.js', 'sw.js']) {
+  try { new Function(fs.readFileSync(f, 'utf8')); } catch (e) { console.error(`${f}: ${e.message}`); process.exit(1); }
+}
+console.log(`Syntax OK (${blocks.length} inline script block(s) + config.js + sw.js)`);
