@@ -4,6 +4,9 @@ import pathlib, re, sys
 import pglast
 
 ok = True
+# Functions signed-out callers may run. Keep this list tiny: each one needs its own token check inside
+# and a test in tests/check_db.py. log_steps is called by an iOS Shortcut, which can't sign in.
+ANON_OK = {"public.log_steps"}
 files = sorted(pathlib.Path("supabase/migrations").glob("*.sql"))
 if not files:
     print("No migrations found"); sys.exit(1)
@@ -28,7 +31,8 @@ for f in files:
                 print(f"{f.name}: security definer function {fn} must pin search_path"); ok = False
             if not re.search(rf"revoke [^;]* on function {re.escape(fn)}\b[^;]*from[^;]*\bpublic\b[^;]*\banon\b", ALL_SQL, re.I):
                 print(f"{f.name}: security definer function {fn} must revoke execute from public and anon"); ok = False
-    if re.search(r"grant [^;]* to [^;]*\banon\b", sql, re.I):
-        print(f"{f.name}: grants to anon are not allowed"); ok = False
+    for g in re.findall(r"grant [^;]* to [^;]*\banon\b", sql, re.I):
+        if not any(re.match(rf"grant execute on function {re.escape(fn)}\s*\(", g, re.I) for fn in ANON_OK):
+            print(f"{f.name}: grants to anon are not allowed"); ok = False
     print(f"{f.name}: {n} statements parsed")
 sys.exit(0 if ok else 1)

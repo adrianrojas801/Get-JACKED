@@ -117,6 +117,33 @@ def main():
         check(val("select count(*) from public.board", B) == "0", "A person can update and remove their own board rows")
         check(psql("set role anon; select count(*) from public.board", ok=False).returncode != 0,
               "Signed-out visitors (anon) can't read the board")
+        # Automatic steps: a personal link token that can only set a step count.
+        tok = val("select public.new_steps_token()", A)
+        check(len(tok) == 64 and val("select count(*) from public.step_tokens", B) == "0",
+              "A person can make a steps link, and nobody else sees it exists")
+        check(fails("select token_hash from public.step_tokens", A), "The stored token can't be read back")
+        check(fails(f"insert into public.step_tokens (user_id, token_hash) values ('{B}', 'x')", B),
+              "Tokens can only be made through the function")
+        anon = lambda sql: psql(f"set role anon; {sql}", ok=False)
+        psql("insert into public.docs (coll, id, data) values ('days', current_date::text, '{\"weight\":171}')", A)
+        today = f"from public.docs where user_id = '{A}' and id = current_date::text"
+        check(anon(f"select public.log_steps('{tok}', 9123)").returncode == 0 and val(f"select data ->> 'steps' {today}") == "9123",
+              "The Shortcut (signed out, with the token) can set today's steps")
+        check(val(f"select data ->> 'weight' {today}") == "171", "Setting steps keeps the rest of that day's log")
+        check(anon(f"select public.log_steps('{tok}', 300, (current_date - 1))").returncode == 0
+              and val(f"select data ->> 'steps' from public.docs where user_id = '{A}' and id = (current_date - 1)::text") == "300",
+              "It can also fill in a day that has no log yet")
+        check(anon("select public.log_steps('" + "0" * 64 + "', 5000)").returncode != 0, "A wrong token is rejected")
+        check(anon(f"select public.log_steps('{tok}', -5)").returncode != 0
+              and anon(f"select public.log_steps('{tok}', 5000, '2020-01-01')").returncode != 0,
+              "Bad step counts and old dates are rejected")
+        check(anon("select count(*) from public.docs").returncode != 0 and anon("select public.new_steps_token()").returncode != 0,
+              "Signed-out callers still can't read logs or make tokens")
+        tok2 = val("select public.new_steps_token()", A)
+        check(anon(f"select public.log_steps('{tok}', 1)").returncode != 0 and anon(f"select public.log_steps('{tok2}', 7000)").returncode == 0,
+              "Making a new link turns the old one off")
+        psql("delete from public.step_tokens", A)
+        check(anon(f"select public.log_steps('{tok2}', 1)").returncode != 0, "Turning automatic steps off kills the link")
     except Exception as e:  # a setup step failed
         check(False, f"Database test setup: {e}")
     finally:

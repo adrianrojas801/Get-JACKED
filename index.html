@@ -212,6 +212,8 @@ main>.row.between>button{flex:none;white-space:nowrap}
 table.board td:not(:first-child),table.board th:not(:first-child){text-align:right}
 table.board th{font-size:10px;letter-spacing:.04em}
 table.board tr.me td:first-child{font-weight:700;color:var(--accent)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--chip);padding:1px 5px;border-radius:5px}
+ol.plain{margin:4px 0}ol.plain li{margin:6px 0}
 #auth{display:none;max-width:420px;margin:0 auto;padding:24px 16px 40px}
 body.signedout #auth{display:block}
 body.signedout main,body.signedout nav,body.signedout #timer,body.signedout #status,body.signedout #me,body.signedout #hsub{display:none!important}
@@ -1200,7 +1202,7 @@ function viewAccount(){
   let h=`<div class="backrow"><button class="small" data-act="meback">← Back</button></div>`;
   h+=viewRequests();
   h+=pendingCard();
-  h+=accountUI();
+  h+=accountUI()+stepsCard();
   h+=`<div class="card"><h2>Backup</h2><p class="muted">Your data saves to your account automatically. This copies all of it as text, if you ever want a backup.</p><button class="small" data-act="copy">${S.copied?'Copied ✓':'Copy all data'}</button>${S.copyText?`<textarea readonly style="margin-top:8px;height:120px">${esc(S.copyText)}</textarea>`:''}</div>`;
   return h;
 }
@@ -1252,7 +1254,7 @@ function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
 function meBadge(){const b=$('#me');if(!b)return;const n=((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email)||'').trim();b.textContent=n?n[0]:'?';b.classList.toggle('on',S.tab==='account')}
-function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account';S.reqs=null;S.reqMsg=null}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
+function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account';S.reqs=null;S.reqMsg=null;S.stepLink=undefined}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
 $('#me').addEventListener('click',toggleAccount);
 function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&$('#app').contains(a)){S.needRender=true;return}render()}
 document.addEventListener('focusout',()=>setTimeout(()=>{if(S.needRender){const a=document.activeElement;if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render()}},50));
@@ -1360,6 +1362,10 @@ app.addEventListener('click',e=>{
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
     w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;render()}
   else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
+  else if(act==='stepnew')newStepLink();
+  else if(act==='stepoff')stopStepLink();
+  else if(act==='stepdone'){S.stepTok=null;render()}
+  else if(act==='cp'){Promise.resolve().then(()=>navigator.clipboard.writeText(ds.cp)).then(()=>toast('Copied'),()=>toast('Press and hold the text to copy it'))}
   else if(act==='boardwk'){S.boardWeek=ds.v;render()}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);putSettings(s);render()}
@@ -1431,6 +1437,35 @@ function accountUI(){
 async function saveName(){const v=($('#acname').value||'').trim().slice(0,40);const {error}=await SB.from('profiles').update({display_name:v}).eq('id',ME.user.id);S.nameMsg=error?'Couldn’t save the name.':'Saved ✓';if(!error&&ME.profile)ME.profile.display_name=v;render()}
 async function changePassword(){const v=$('#acpw').value||'';if(v.length<8){S.pwMsg='Use at least 8 characters.';return render()}const {error}=await SB.auth.updateUser({password:v});S.pwMsg=error?(error.message||'Couldn’t change it.'):'Password changed ✓';render()}
 async function signOut(){flushAll();await sleep(300);try{await SB.auth.signOut()}catch(e){}location.replace(location.pathname)}
+
+// ---------- automatic steps (an iOS Shortcut posts to log_steps with a personal token) ----------
+async function loadStepLink(){try{const {data}=await SB.from('step_tokens').select('created_at,last_used').maybeSingle();S.stepLink=data||false}catch(e){S.stepLink=false}if(S.tab==='account')softRender()}
+async function newStepLink(){const {data,error}=await SB.rpc('new_steps_token');if(error||!data){S.stepMsg='Couldn’t make the link. Try again in a minute.';return render()}S.stepMsg='';S.stepTok=data;S.stepLink={created_at:new Date().toISOString(),last_used:null};render()}
+async function stopStepLink(){try{await SB.from('step_tokens').delete().eq('user_id',ME.user.id)}catch(e){}S.stepTok=null;S.stepLink=false;render()}
+const copyRow=(label,v)=>`<label class="f" style="margin-top:8px">${label}<span class="row"><input readonly value="${esc(v)}" class="grow"><button class="small" type="button" data-act="cp" data-cp="${esc(v)}">Copy</button></span></label>`;
+function stepsCard(){
+  if(!ME.user)return '';
+  if(S.stepLink===undefined){loadStepLink();return ''}
+  let h=`<div class="card"><h2>Automatic steps</h2>`;
+  if(S.stepTok)h+=`<p class="muted" style="margin-top:0">Set this up once on your iPhone. The token below is only shown now, so finish before you leave this page.</p>
+    <ol class="plain" style="padding-left:20px">
+     <li>Open the <b>Shortcuts</b> app, tap <b>+</b> and name the shortcut “Send steps”.</li>
+     <li>Add <b>Find Health Samples</b>. Set the type to <b>Steps</b> and add the filter <b>Start Date is today</b>.</li>
+     <li>Add <b>Calculate Statistics</b> and choose <b>Sum</b>.</li>
+     <li>Add <b>Format Date</b> for the <b>Current Date</b>. Set Date Format to <b>Custom</b> and type <code>yyyy-MM-dd</code>.</li>
+     <li>Add <b>Get Contents of URL</b>. Paste the URL below, set Method to <b>POST</b>, add a header named <code>apikey</code> with the key below, and set Request Body to <b>JSON</b> with three fields:
+       <code>p_token</code> (Text, the token below), <code>p_steps</code> (Number, the Statistics result) and <code>p_date</code> (Text, the Formatted Date).</li>
+     <li>Tap ▶ to test it. Your steps show up on Today within a few seconds.</li>
+     <li>In the <b>Automation</b> tab, add a <b>Time of Day</b> automation (9:00 PM, daily, Run Immediately) that runs “Send steps”.</li>
+    </ol>${copyRow('URL',CFG.url+'/rest/v1/rpc/log_steps')}${copyRow('apikey header',CFG.key)}${copyRow('p_token',S.stepTok)}
+    <div class="row" style="margin-top:10px"><button class="small" data-act="stepdone">Done</button></div>`;
+  else if(S.stepLink)h+=`<p class="muted" style="margin-top:0">Automatic steps are on. ${S.stepLink.last_used?'Last received '+new Date(S.stepLink.last_used).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'.':'Nothing received yet.'}</p>
+    <div class="row wrap"><button class="small" data-act="stepnew">Make a new link</button><button class="small" data-act="stepoff">Turn off</button></div>
+    <div class="muted" style="margin-top:6px">A new link stops the old Shortcut until you paste the new token into it.</div>`;
+  else h+=`<p class="muted" style="margin-top:0">Have your iPhone send your Apple Health steps to the app every day, so you don’t have to type them. It takes about 5 minutes to set up in the Shortcuts app.</p><button class="small primary" data-act="stepnew">Set up automatic steps</button>`;
+  if(S.stepMsg)h+=`<div class="err">${esc(S.stepMsg)}</div>`;
+  return h+`</div>`;
+}
 
 // ---------- sign-in screens ----------
 function authScreen(mode,msg){
