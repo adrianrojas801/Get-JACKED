@@ -95,7 +95,7 @@ async def main():
         check(await page.is_visible("#nav") and "Your plan is ready" in await page.inner_text("#app"),
               "Tabs come back after the intake")
 
-        await page.click("button[data-act=preset]")
+        await page.click("button[data-act=quick]")
         await page.fill("input[data-day=weight]", "170.2"); await page.wait_for_timeout(1500)
         docs = await page.evaluate("JSON.stringify(window.__docs)")
         check("170.2" in docs and '"food":[{' in docs, "Quick-add food and weight save")
@@ -181,7 +181,10 @@ async def main():
         check(prog["days"]["push"]["ex"][4]["n"] == "Cable lateral raise" and "swaps" not in s,
               "Saved 'Always' swaps carry over into the program")
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)
-        check("pozole" in (await page.inner_text("#app")).lower(), "Pablo keeps his own food cheat sheet")
+        check("pozole" not in (await page.inner_text("#app")).lower(), "Plan keeps the rules and food tips folded away")
+        await page.click("details.how summary"); await page.wait_for_timeout(150)
+        check("pozole" in (await page.inner_text("#app")).lower() and "double progression" in (await page.inner_text("#app")).lower(),
+              "How this works opens the rules and Pablo's own food cheat sheet")
         await page.evaluate("window.__failInsert = true")
         await page.click("button[data-act=redo]"); await page.wait_for_timeout(200)
         await page.select_option("#in_sex", "m"); await page.fill("#in_age", "23"); await page.fill("#in_ft", "5")
@@ -225,44 +228,61 @@ async def main():
         await page.click("button[data-act=checkok]"); await page.wait_for_timeout(300)
         check("week check-in" not in (await page.inner_text("#app")).lower() and (await settings(page)).get("checkin") == sunday,
               "Got it puts the check-in away until next week")
-        check("recent" in app and "same as yesterday" in app and "idea:" in app,
-              "Today offers recent foods, yesterday's log and a protein idea")
-        await page.click("button[data-act=recent]"); await page.wait_for_timeout(300)
+        check("same as yesterday" in app and "idea:" in app and "burrito" in (await page.inner_text(".chips")).lower()
+              and await page.locator(".chips button").count() == 6 and not await page.is_visible("input[data-day=sleep]"),
+              "Today fits the essentials: six most-used foods, yesterday's log, a protein idea, and only the body fields you use")
+        await page.click("button[data-act=bodymore]"); await page.wait_for_timeout(150)
+        check(await page.is_visible("input[data-day=sleep]") and await page.is_visible("input[data-day=waist]"), "Sleep, cardio and waist open on request")
+        await page.click("button[data-act=quick]"); await page.wait_for_timeout(300)
         food = await page.evaluate(f"(window.__docs['days/{ago(0)}']||{{}}).food||[]")
         check(len(food) == 1 and food[0]["n"] == "Burrito" and "700" in await page.inner_text("#hero"),
               "Tapping a recent food logs it and updates the rings")
         check("sam finished push today" in (await page.inner_text("#app")).lower(), "Today shows that your friend trained")
 
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
+        sheet = (await page.inner_text(".sheet")).lower()
+        check("all foods" in sheet and "recent" in sheet and "greek yogurt" in sheet, "All foods opens the full list as a sheet")
+        await page.fill("#fsearch", "greek"); await page.wait_for_timeout(150)
+        check(await page.locator(".sheet .chips button:visible").count() == 1, "Search narrows the list")
+        await page.fill("#cn", "Test bar"); await page.fill("#cc", "200"); await page.fill("#cp", "20")
+        await page.click("button[data-act=custom]"); await page.wait_for_timeout(200)
+        await page.click("button[data-act=qedit]"); await page.wait_for_timeout(200)
+        await page.fill("input[data-pre='0'][data-pf=c]", "222"); await page.wait_for_timeout(1000)
+        check((await settings(page))["presets"][0]["c"] == 222, "Edit in the sheet changes a quick-add food's numbers")
+        await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
+        check(await page.locator(".sheet").count() == 0 and "test bar" in (await page.inner_text("#flog")).lower(), "Done closes the sheet and the food is logged")
+        await page.click("#flog li:has-text('Test bar') button[data-v='-1']"); await page.wait_for_timeout(200)
+        check("test bar" not in (await page.inner_text("#flog")).lower() and "Removed Test bar" in await page.inner_text("#toast"),
+              "Removing a food offers Undo")
+        await page.click("#undo"); await page.wait_for_timeout(300)
+        check("test bar" in (await page.inner_text("#flog")).lower(), "Undo puts it back")
+
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
         check("no new best in 3 sessions" in app.lower() and "110 × 12, 12, 12" in app, "A stalled lift gets a back-off suggestion and a lighter target")
-        check("40 × 11, 10, 9" in app, "Each exercise shows today's target: last time plus one rep")
+        check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1,
+              "One exercise is open, the rest fold to a line with today's target")
+        await page.click("button.exrow[data-i='1']"); await page.wait_for_timeout(200)
+        rep = "input[data-w='1'][data-s='0'][data-f=r]"
+        await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='1']")
+        up = await page.input_value(rep)
+        await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='-1']")
+        check(up == "12" and await page.input_value(rep) == "11", "The + and − buttons start from the target")
         await page.click("button[data-act=setdone][data-i='1'][data-j='0']"); await page.wait_for_timeout(300)
         done = (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']"))["ex"][1]["sets"][0]
         check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
+        check("set 2 of 3" in (await page.inner_text(".exopen")).lower(), "Done moves on to the next set")
+        await page.click("button.exrow[data-i='0']"); await page.wait_for_timeout(200)
         await page.fill("input[data-w='0'][data-s='0'][data-f=w]", "125"); await page.fill("input[data-w='0'][data-s='0'][data-f=r]", "10")
         await page.click("button[data-act=setdone]"); await page.wait_for_timeout(300)
         check("New best: Lat pulldown 125×10" in await page.inner_text("#toast"), "Beating your best shows a toast")
         await page.click("button[data-act=finish]"); await page.wait_for_timeout(300)
         check("new bests: lat pulldown 125×10" in (await page.inner_text("#app")).lower(), "The finish summary lists the new best")
 
-        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(3800)
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
         app = (await page.inner_text("#app")).lower()
-        check("records" in app and "lifts this week" in app and "125×10" in app, "Progress shows records and this week's lifts")
-        mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
-        check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
-              "The board shows you next to your friend, with only weekly totals shared")
-        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at",
-                               "planned", "last_workout", "last_title"}
-              and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
-              "Nothing else is sent to the board")
-        check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
-              "The board shows the shared weekly goal")
-
-        check("sets per muscle" in app and "lats" in app, "Progress shows weekly sets per muscle")
-        await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
-        check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
-              "Marking a focus muscle saves it and flags it when it's under 10 sets")
+        check(await page.locator(".seg button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
+              "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
         await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
         s = await settings(page)
@@ -270,6 +290,33 @@ async def main():
               "Choosing a mini-cut sets the new calorie, protein and goal-weight targets")
         await page.click("button[data-act=checkshow]"); await page.wait_for_timeout(200)
         check("week check-in" in (await page.inner_text("#app")).lower(), "The check-in can be reopened from Progress")
+
+        await page.click("button[data-act=psec][data-v=lifts]"); await page.wait_for_timeout(300)
+        app = (await page.inner_text("#app")).lower()
+        check("records" in app and "lifts this week" in app and "125×10" in app, "Lifts shows records and this week's lifts")
+        check("sets per muscle" in app and "lats" in app, "Lifts shows weekly sets per muscle")
+        await page.click("svg.mfig-xl path[data-mus=lats]"); await page.wait_for_timeout(200)
+        app2 = (await page.inner_text("#app")).lower()
+        check("this week: lat pulldown" in app2 and "in your plan: lat pulldown" in app2 and await page.locator("path.msel").count() == 2,
+              "Tapping a muscle on the figure shows what trained it and what in the plan targets it")
+        check(await page.evaluate("JSON.stringify([musFor('Cable woodchop').p, musFor('Hip adduction machine').p, musFor('Upright row').p, musFor('Smith squat').s])")
+              == '[["obliques"],["adductors"],["sdelt","traps"],["hams","adductors"]]', "The figure knows obliques, inner thighs and more exercises")
+        await page.click("ul.mlist button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
+        check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
+              "Marking a focus muscle saves it and flags it when it's under 10 sets")
+
+        await page.wait_for_timeout(3300)
+        await page.click("button[data-act=psec][data-v=friends]"); await page.wait_for_timeout(500)
+        app = (await page.inner_text("#app")).lower()
+        mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
+        check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
+              "Friends shows you next to your friend, with only weekly totals shared")
+        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at",
+                               "planned", "last_workout", "last_title"}
+              and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
+              "Nothing else is sent to the board")
+        check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
+              "The board shows the shared weekly goal")
 
         await page.click("#me"); await page.wait_for_timeout(300)
         await page.click("#acboard"); await page.wait_for_timeout(300)
