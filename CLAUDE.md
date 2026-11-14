@@ -66,7 +66,7 @@ CI (`.github/workflows/ci.yml`) runs these on every PR. Run them locally before 
 ```bash
 node tests/check_syntax.js     # inline <script> + config.js syntax
 python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, file naming
-python3 tests/smoke.py         # headless sign-in, save, import, reload (mocked Supabase)
+python3 tests/smoke.py         # headless sign-in, intake, editor, save, reload (mocked Supabase)
 ```
 
 - `main`'s ruleset requires one check: **Merge gate**, which passes only when every other CI job passed. When you add a CI job, add it to the gate's `needs:` list, or it won't block merging.
@@ -100,7 +100,7 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 
 ## Writing style for UI text and docs
 
-Plain, direct, short sentences. No hype or filler. Spell out what the user should do ("Tap **Import**"), not how the code works.
+Plain, direct, short sentences. No hype or filler. Spell out what the user should do ("Tap **Build my plan**"), not how the code works.
 
 ## Planned work (for context)
 
