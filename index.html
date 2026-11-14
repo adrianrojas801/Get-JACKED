@@ -209,6 +209,9 @@ main>.row.between>button{flex:none;white-space:nowrap}
 .wd.miss i{border-color:var(--warn)}
 .wd.now span{color:var(--accent)}
 .wd.now i{box-shadow:0 0 0 3px var(--accent-soft)}
+table.board td:not(:first-child),table.board th:not(:first-child){text-align:right}
+table.board th{font-size:10px;letter-spacing:.04em}
+table.board tr.me td:first-child{font-weight:700;color:var(--accent)}
 #auth{display:none;max-width:420px;margin:0 auto;padding:24px 16px 40px}
 body.signedout #auth{display:block}
 body.signedout main,body.signedout nav,body.signedout #timer,body.signedout #status,body.signedout #me,body.signedout #hsub{display:none!important}
@@ -464,7 +467,7 @@ async function flush(path){
   }
   p.inflight=false;
   if(p.dirty||p.again){p.again=false;flush(path)}
-  else{delete pending[path];if(ok){refresh(path);if(!Object.keys(pending).length)setStatus('Saved ✓')}}
+  else{delete pending[path];if(ok){refresh(path);if(!Object.keys(pending).length){setStatus('Saved ✓');queueBoard()}}}
 }
 function flushAll(){for(const k of Object.keys(pending))flush(k)}
 function fail(e){
@@ -582,6 +585,51 @@ function ring(v,t,label,unit=''){
 }
 const STEP_GOAL=8000;
 function hero(d,t){const tot=foodTotals(d);return `<div class="card" id="hero"><div class="rings">${ring(tot.c,t.cal,'Calories')}${ring(tot.p,t.pro,'Protein',' g')}${ring(num(d.steps)||0,STEP_GOAL,'Steps')}</div></div>`}
+
+// ---------- board (weekly totals shared with everyone on the app) ----------
+// Only these totals leave your private data. Turn it off under Account.
+const sharing=()=>cfg().board!==false;
+const myName=()=>((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email||'').split('@')[0]||'Someone').trim().slice(0,40)||'Someone';
+// Average % change in each lift's best: the 4 weeks up to `end` against the 4 weeks before.
+function strengthGain(end){
+  const a=addDays(end,-28),b=addDays(end,-56),g=[];
+  for(const n of liftNames()){const h=liftHistory(n,end),now=bestOf(h.filter(x=>x.date>a)),was=bestOf(h.filter(x=>x.date>b&&x.date<=a));if(now&&was&&was.v>0)g.push((now.v/was.v-1)*100)}
+  return g.length?Math.max(-100,Math.min(500,r1(avg(g)))):null;
+}
+function boardRow(ws){const w=weekStats(ws),end=addDays(ws,6)>today()?today():addDays(ws,6);
+  return {user_id:ME.user.id,week:ws,name:myName(),workouts:Math.min(14,w.workouts),protein_days:w.proteinDays,steps:Math.min(100000,w.steps),strength:strengthGain(end)}}
+async function publishBoard(){
+  if(!SB||!ME.user||!S.loaded||!sharing()||needsIntake())return;
+  const ws=weekStart(today()),rows=[boardRow(addDays(ws,-7)),boardRow(ws)],sig=JSON.stringify(rows);
+  if(sig===S.boardSent)return;S.boardSent=sig;
+  try{const {error}=await SB.from('board').upsert(rows.map(r=>Object.assign({updated_at:new Date().toISOString()},r)),{onConflict:'user_id,week'});if(error)S.boardSent=null}catch(e){S.boardSent=null}
+}
+function queueBoard(){clearTimeout(queueBoard.t);queueBoard.t=setTimeout(publishBoard,3000)}
+async function loadBoard(){
+  if(S.boardBusy)return;S.boardBusy=true;
+  try{await publishBoard();const {data,error}=await SB.from('board').select('user_id,week,name,workouts,protein_days,steps,strength').gte('week',addDays(weekStart(today()),-7));
+    if(error)throw error;S.board=data||[];S.boardErr=null}catch(e){S.board=[];S.boardErr=true}
+  S.boardBusy=false;S.boardAt=Date.now();if(S.tab==='progress')softRender();
+}
+async function setSharing(on){
+  const s=clone(cfg());s.board=on;putSettings(s);S.board=null;S.boardSent=null;
+  if(!on){try{await SB.from('board').delete().eq('user_id',ME.user.id)}catch(e){}}
+  render();
+}
+function boardCard(){
+  const head=`<div class="card"><h2>The board</h2>`;
+  if(!sharing())return head+`<p class="muted" style="margin:0">You’re not on the board. Turn on sharing under your account (top right) to compare weekly totals with your friends.</p></div>`;
+  if(S.board==null||Date.now()-(S.boardAt||0)>60000)loadBoard();
+  if(S.board==null)return head+`<div class="muted">Loading…</div></div>`;
+  if(S.boardErr)return head+`<div class="muted">The board isn’t available right now.</div></div>`;
+  const ws=weekStart(today()),wk=S.boardWeek==='last'?addDays(ws,-7):ws;
+  const rows=S.board.filter(r=>r.week===wk).sort((a,b)=>b.workouts-a.workouts||b.protein_days-a.protein_days||b.steps-a.steps);
+  const top=f=>Math.max(0,...rows.map(f)),cols=[['Workouts',r=>r.workouts,v=>v],['Protein days',r=>r.protein_days,v=>v],['Avg steps',r=>r.steps,v=>v?fmt(v):'–'],['Strength',r=>r.strength==null?-999:+r.strength,v=>v===-999?'–':(v>=0?'+':'')+v+'%']];
+  const cell=([,f,show],r)=>{const v=f(r),lead=rows.length>1&&v>0&&v===top(f);return `<td>${lead?'<b class="good">':''}${show(v)}${lead?'</b>':''}</td>`};
+  return head+`<div class="row" style="margin-bottom:8px"><button class="small ${wk===ws?'primary':''}" data-act="boardwk" data-v="this">This week</button><button class="small ${wk===ws?'':'primary'}" data-act="boardwk" data-v="last">Last week</button></div>
+    ${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
+    <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals are shared.</div></div>`;
+}
 
 // ---------- toast ----------
 function toast(msg){const el=$('#toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2600)}
@@ -901,7 +949,7 @@ function viewProgress(){
     <div class="kpi"><b>${st?fmt(st):'–'}</b><span>avg steps</span></div>
     <div class="kpi"><b>${cd||0} min</b><span>cardio</span></div></div>
     <div class="muted" style="margin-top:6px">Food averages only count days you logged, and leave out today.</div></div>`;
-  h+=liftsWeekCard(td);
+  h+=liftsWeekCard(td)+boardCard();
   // waist
   const waist=Object.values(S.days).filter(d=>num(d.waist)).sort((a,b)=>a.date.localeCompare(b.date));
   h+=`<div class="card"><h2>Waist</h2>`;
@@ -1234,6 +1282,7 @@ app.addEventListener('input',e=>{
 app.addEventListener('change',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='snapfile'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snap=null;render()}return}
+  if(el.id==='acboard'){setSharing(el.checked);return}
   if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;render()}}
   else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;render()}
   else if(el.id==='liftsel'){S.lift=el.value;render()}
@@ -1311,6 +1360,7 @@ app.addEventListener('click',e=>{
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
     w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;render()}
   else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
+  else if(act==='boardwk'){S.boardWeek=ds.v;render()}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);putSettings(s);render()}
   else if(act==='newblock'){const s=clone(cfg());s.block=today();putSettings(s);render()}
@@ -1374,6 +1424,8 @@ function accountUI(){
    <div class="row" style="margin-top:8px"><button class="small" data-act="namesave">Save name</button><span class="muted">${esc(S.nameMsg||'')}</span></div>
    <label class="f" style="margin-top:12px">New password<input id="acpw" type="password" autocomplete="new-password" placeholder="at least 8 characters"></label>
    <div class="row" style="margin-top:8px"><button class="small" data-act="pwchange">Change password</button><span class="muted">${esc(S.pwMsg||'')}</span></div>
+   <label class="check" style="margin-top:14px"><input type="checkbox" id="acboard" ${sharing()?'checked':''}> Show me on the board</label>
+   <div class="muted" style="margin-top:4px">Shares four weekly totals with the other people on this app: workouts, protein days, average steps and strength change. Never your food, weight or lifts.</div>
    <button class="small" data-act="signout" style="margin-top:14px">Sign out</button></div>`;
 }
 async function saveName(){const v=($('#acname').value||'').trim().slice(0,40);const {error}=await SB.from('profiles').update({display_name:v}).eq('id',ME.user.id);S.nameMsg=error?'Couldn’t save the name.':'Saved ✓';if(!error&&ME.profile)ME.profile.display_name=v;render()}
@@ -1431,7 +1483,7 @@ async function start(){
   S.sample=null;S.boot=false;
   const db=makeDb(ME.user.id);S.db=db;render();
   const timer=setTimeout(()=>{if(!S.loaded){S.timedOut=true;S.note='Still connecting, so some saved data may be missing. Check your connection; it will fill in once it connects.';setStatus('Connecting…');render()}},10000);
-  const got=k=>{S.ready[k]=true;if(!S.loaded&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;setStatus('Saved ✓');render();checkPlan();return true}return false};
+  const got=k=>{S.ready[k]=true;if(!S.loaded&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;setStatus('Saved ✓');render();checkPlan();queueBoard();return true}return false};
   db.collection('days').onSnapshot(s=>{const ch=applySnap(s,'days',S.days);if(!got('days')&&ch)softRender()},onErr);
   db.collection('workouts').onSnapshot(s=>{const ch=applySnap(s,'workouts',S.workouts);if(!got('workouts')&&ch)softRender()},onErr);
   db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.known['settings/main']=true;let ch=false;if(!pending['settings/main']){const v=s.exists?s.data():{};if(JSON.stringify(v)!==JSON.stringify(S.settings)){S.settings=clone(v);ch=true}}if(!got('settings')&&ch)softRender()},onErr);

@@ -3,7 +3,9 @@
 window.__docs=JSON.parse(sessionStorage.getItem('mockdocs')||'{}');window.__calls=[];
 // intake_requests rows, also kept across reloads. Every user in the mock is the same admin.
 window.__reqs=JSON.parse(sessionStorage.getItem('mockreqs')||'[]');
-const persist=()=>{sessionStorage.setItem('mockdocs',JSON.stringify(__docs));sessionStorage.setItem('mockreqs',JSON.stringify(__reqs))};
+// Shared board rows and the steps link, also kept across reloads.
+window.__board=JSON.parse(sessionStorage.getItem('mockboard')||'[]');window.__steptok=JSON.parse(sessionStorage.getItem('mocksteptok')||'null');
+const persist=()=>{sessionStorage.setItem('mockdocs',JSON.stringify(__docs));sessionStorage.setItem('mockreqs',JSON.stringify(__reqs));sessionStorage.setItem('mockboard',JSON.stringify(__board));sessionStorage.setItem('mocksteptok',JSON.stringify(__steptok))};
 window.supabase={createClient(){
   let session=JSON.parse(localStorage.getItem('mocksess')||'null');
   const key=(c,i)=>c+'/'+i;
@@ -11,7 +13,8 @@ window.supabase={createClient(){
     const f={};let mode='select',payload=null,single=false;
     const b={
       select(){mode=mode==='select'?'select':mode;return b},
-      eq(k,v){f[k]=v;return b},limit(){return b},order(){return b},
+      eq(k,v){f[k]=v;return b},gte(){return b},limit(){return b},order(){return b},
+      delete(){mode='delete';return b},
       insert(rows){mode='insert';payload=Array.isArray(rows)?rows:[rows];return b},
       maybeSingle(){single=true;return b},
       upsert(rows){mode='upsert';payload=Array.isArray(rows)?rows:[rows];return b},
@@ -26,6 +29,13 @@ window.supabase={createClient(){
         if(mode==='insert'&&window.__failInsert)return {error:{message:'Failed to fetch'}};
         if(mode==='insert'){for(const r of payload)__reqs.unshift({id:'r'+(__reqs.length+1),user_id:session.user.id,answers:r.answers,plan:null,status:'new',created_at:new Date().toISOString()});persist();return {error:null}}
         return {data:__reqs.filter(r=>(!f.user_id||r.user_id===f.user_id)&&(!f.status||r.status===f.status)).map(r=>JSON.parse(JSON.stringify(r))),error:null}}
+      if(table==='board'){
+        if(mode==='upsert'){for(const r of payload){const i=__board.findIndex(x=>x.user_id===r.user_id&&x.week===r.week);if(i<0)__board.push(r);else __board[i]=r}persist();return {error:null}}
+        if(mode==='delete'){__board=__board.filter(x=>x.user_id!==f.user_id);persist();return {error:null}}
+        return {data:JSON.parse(JSON.stringify(__board)),error:null}}
+      if(table==='step_tokens'){
+        if(mode==='delete'){__steptok=null;persist();return {error:null}}
+        return {data:__steptok,error:null}}
       if(mode==='upsert'){for(const r of payload)__docs[key(r.coll,r.id)]=JSON.parse(JSON.stringify(r.data));persist();return {error:null}}
       const rows=Object.entries(__docs).filter(([k])=>!f.coll||k.startsWith(f.coll+'/')).map(([k,d])=>({id:k.split('/')[1],data:d})).filter(r=>!f.id||r.id===f.id);
       if(single)return {data:rows[0]||null,error:null};
@@ -44,6 +54,7 @@ window.supabase={createClient(){
     from:qb,
     rpc:async(n,a)=>{__calls.push(['rpc',n]);
       if(n==='send_intake_plan'){const r=__reqs.find(x=>x.id===a.p_id);if(!r)return {error:{message:'Request not found'}};r.plan=JSON.parse(JSON.stringify(a.p_plan));r.status='sent';persist();return {error:null}}
+      if(n==='new_steps_token'){__steptok={created_at:new Date().toISOString(),last_used:null};persist();return {data:'tok_'+'a'.repeat(60),error:null}}
       if(n==='mark_intake_applied'){const r=__reqs.find(x=>x.id===a.p_id&&x.status==='sent');if(r){r.status='applied';persist()}return {error:null}}
       const k=key(a.p_coll,a.p_id);__docs[k]=Object.assign(__docs[k]||{},JSON.parse(JSON.stringify(a.p_patch)));persist();return {error:null}},
     channel(){const c={on(){return c},subscribe(){return c}};return c}

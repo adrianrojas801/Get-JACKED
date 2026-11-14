@@ -100,6 +100,23 @@ def main():
               "The person can mark their program as applied")
         check(psql("set role anon; select count(*) from public.intake_requests", ok=False).returncode != 0,
               "Signed-out visitors (anon) can't read requests")
+        # The board: shared weekly totals.
+        row = "(week, name, workouts, protein_days, steps, strength) values ('2026-11-08', 'a', 4, 5, 8200, 2.5)"
+        psql(f"insert into public.board {row}", A)
+        check(val("select name || ':' || workouts from public.board", B) == "a:4", "Everyone signed in can read the board")
+        check(fails(f"insert into public.board (user_id, week, name) values ('{A}', '2026-11-01', 'fake')", B),
+              "Nobody can post to the board as someone else")
+        psql("update public.board set workouts = 14", B)
+        psql("delete from public.board", B)
+        check(val("select workouts from public.board", A) == "4", "Nobody can change or remove someone else's board row")
+        check(fails("insert into public.board (week, name, workouts) values ('2026-11-01', 'a', 99)", A)
+              and fails("insert into public.board (week, name, steps) values ('2026-11-01', 'a', 9999999)", A),
+              "Board totals outside sensible ranges are rejected")
+        psql("update public.board set workouts = 5", A)
+        psql("delete from public.board", A)
+        check(val("select count(*) from public.board", B) == "0", "A person can update and remove their own board rows")
+        check(psql("set role anon; select count(*) from public.board", ok=False).returncode != 0,
+              "Signed-out visitors (anon) can't read the board")
     except Exception as e:  # a setup step failed
         check(False, f"Database test setup: {e}")
     finally:
