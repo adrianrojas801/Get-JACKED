@@ -1,8 +1,10 @@
 // Service worker: keeps the app's own files on the phone so Get Jacked opens with no signal.
 // Your data is not cached here. index.html keeps its own copy (see "offline copy" there).
 // Bump CACHE when the list of files changes.
-const CACHE = 'gj-shell-v1';
-const SHELL = ['./', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icons/icon-192.png?v=2', 'icons/apple-touch-icon.png?v=2'];
+const CACHE = 'gj-shell-v2';
+const SHELL = ['./', 'config.js', 'vendor/supabase.js', 'css/app.css',
+  'js/program.js', 'js/core.js', 'js/training.js', 'js/shared.js', 'js/today.js', 'js/workout.js', 'js/progress.js', 'js/plan.js', 'js/events.js', 'js/app.js',
+  'manifest.webmanifest', 'icons/icon-192.png?v=2', 'icons/apple-touch-icon.png?v=2'];
 const WAIT_MS = 3500; // on a weak signal, stop waiting for the network and open the saved copy
 
 self.addEventListener('install', e => {

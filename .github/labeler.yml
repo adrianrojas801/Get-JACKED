@@ -5,6 +5,8 @@ app:
       - any-glob-to-any-file:
           - index.html
           - sw.js
+          - css/**
+          - js/**
           - config.js
           - vendor/**
           - manifest.webmanifest
