@@ -227,6 +227,7 @@ body.setup #nav{display:none}
 ul.ticks{list-style:none;padding-left:0}ul.ticks li>span:first-child{display:inline-block;width:18px;font-weight:700}
 .mlist li{align-items:center}.mlist .grow{flex:1}.mlist li>span:last-child{white-space:nowrap}
 button.star{font-size:17px;padding:0 6px 0 0;color:var(--muted);line-height:1}button.star.on{color:var(--accent)}
+.buddy{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13.5px;color:var(--accent);font-weight:600}
 .newplan{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 details.pday{border-top:1px solid var(--line);padding:10px 0}
 details.pday summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
@@ -657,29 +658,49 @@ function strengthGain(end,keep){
   return g.length?Math.max(-100,Math.min(500,r1(avg(g)))):null;
 }
 function boardRow(ws){const w=weekStats(ws),end=addDays(ws,6)>today()?today():addDays(ws,6);
-  return {user_id:ME.user.id,week:ws,name:myName(),workouts:Math.min(14,w.workouts),protein_days:w.proteinDays,steps:Math.min(100000,w.steps),strength:strengthGain(end)}}
+  const last=Object.values(S.workouts).filter(x=>trained(x)&&x.date>=ws&&x.date<=end).sort((a,b)=>b.date.localeCompare(a.date)||(b.updated||0)-(a.updated||0))[0];
+  return {user_id:ME.user.id,week:ws,name:myName(),workouts:Math.min(14,w.workouts),protein_days:w.proteinDays,steps:Math.min(100000,w.steps),strength:strengthGain(end),
+    planned:plannedPerWeek(),last_workout:last?last.date:null,last_title:last?String(last.title||titleOf(last.prog)).slice(0,40):null}}
 async function publishBoard(){
   if(!SB||!ME.user||!S.loaded||!sharing()||needsIntake())return;
   const ws=weekStart(today()),rows=[boardRow(addDays(ws,-7)),boardRow(ws)],sig=JSON.stringify(rows);
   if(sig===S.boardSent)return;S.boardSent=sig;
-  try{const {error}=await SB.from('board').upsert(rows.map(r=>Object.assign({updated_at:new Date().toISOString()},r)),{onConflict:'user_id,week'});if(error)S.boardSent=null}catch(e){S.boardSent=null}
+  try{const {error}=await SB.from('board').upsert(rows.map(r=>Object.assign({updated_at:new Date().toISOString()},r)),{onConflict:'user_id,week'});if(error)S.boardSent=null;
+    // Keep your own rows on screen in step with what was just sent, without waiting for the next reload of the board.
+    else if(S.board){S.board=S.board.filter(r=>r.user_id!==ME.user.id).concat(rows);if(S.tab==='progress')softRender()}}catch(e){S.boardSent=null}
 }
 function queueBoard(){clearTimeout(queueBoard.t);queueBoard.t=setTimeout(publishBoard,3000)}
 async function loadBoard(){
   if(S.boardBusy)return;S.boardBusy=true;
-  try{await publishBoard();const {data,error}=await SB.from('board').select('user_id,week,name,workouts,protein_days,steps,strength').gte('week',addDays(weekStart(today()),-7));
+  try{await publishBoard();const {data,error}=await SB.from('board').select('user_id,week,name,workouts,protein_days,steps,strength,planned,last_workout,last_title').gte('week',addDays(weekStart(today()),-7));
     if(error)throw error;S.board=data||[];S.boardErr=null}catch(e){S.board=[];S.boardErr=true}
-  S.boardBusy=false;S.boardAt=Date.now();if(S.tab==='progress')softRender();
+  S.boardBusy=false;S.boardAt=Date.now();if(S.tab==='progress'||S.tab==='today')softRender();
 }
 async function setSharing(on){
   const s=clone(cfg());s.board=on;putSettings(s);S.board=null;S.boardSent=null;
   if(!on){try{await SB.from('board').delete().eq('user_id',ME.user.id)}catch(e){}}
   render();
 }
+// Loads the board if it hasn't been loaded in the last minute. Returns the rows (null while the first load runs).
+function boardRows(){if(!sharing()||!SB||!ME.user)return null;if(S.board==null||Date.now()-(S.boardAt||0)>60000)loadBoard();return S.board}
+// "Sam finished Push today": friends who trained today or yesterday.
+function buddyLine(){
+  const td=today(),yd=addDays(td,-1),rows=(boardRows()||[]).filter(r=>r.user_id!==ME.user.id&&(r.last_workout===td||r.last_workout===yd));
+  const seen=new Set(),out=[];
+  for(const r of rows.sort((a,b)=>b.last_workout.localeCompare(a.last_workout))){if(seen.has(r.user_id))continue;seen.add(r.user_id);out.push(`${esc(r.name)} finished ${esc(r.last_title||'a workout')} ${r.last_workout===td?'today':'yesterday'}`)}
+  return out.length?`<div class="buddy">${out.join(' · ')}</div>`:'';
+}
+// The shared goal: everyone finishes the workouts in their own plan that week.
+function teamGoal(rows,past){
+  const team=rows.filter(r=>r.planned>0);if(team.length<2)return '';
+  const hit=team.every(r=>r.workouts>=r.planned),left=team.reduce((a,r)=>a+Math.max(0,r.planned-r.workouts),0);
+  return `<div class="banner" style="margin:0 0 10px"><b>Team goal: everyone finishes their planned workouts</b><div>${team.map(r=>`${esc(r.name)} ${r.workouts}/${r.planned}${r.workouts>=r.planned?' ✓':''}`).join(' · ')}</div>
+    <div class="${hit?'good':past?'warn':'muted'}">${hit?'Hit ✓':past?'Missed last week.':`${left} workout${left===1?'':'s'} to go.`}</div></div>`;
+}
 function boardCard(){
   const head=`<div class="card"><h2>The board</h2>`;
   if(!sharing())return head+`<p class="muted" style="margin:0">You’re not on the board. Turn on sharing under your account (top right) to compare weekly totals with your friends.</p></div>`;
-  if(S.board==null||Date.now()-(S.boardAt||0)>60000)loadBoard();
+  boardRows();
   if(S.board==null)return head+`<div class="muted">Loading…</div></div>`;
   if(S.boardErr)return head+`<div class="muted">The board isn’t available right now.</div></div>`;
   const ws=weekStart(today()),wk=S.boardWeek==='last'?addDays(ws,-7):ws;
@@ -687,8 +708,8 @@ function boardCard(){
   const top=f=>Math.max(0,...rows.map(f)),cols=[['Workouts',r=>r.workouts,v=>v],['Protein days',r=>r.protein_days,v=>v],['Avg steps',r=>r.steps,v=>v?fmt(v):'–'],['Strength',r=>r.strength==null?-999:+r.strength,v=>v===-999?'–':(v>=0?'+':'')+v+'%']];
   const cell=([,f,show],r)=>{const v=f(r),lead=rows.length>1&&v>0&&v===top(f);return `<td>${lead?'<b class="good">':''}${show(v)}${lead?'</b>':''}</td>`};
   return head+`<div class="row" style="margin-bottom:8px"><button class="small ${wk===ws?'primary':''}" data-act="boardwk" data-v="this">This week</button><button class="small ${wk===ws?'':'primary'}" data-act="boardwk" data-v="last">Last week</button></div>
-    ${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
-    <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals are shared.</div></div>`;
+    ${teamGoal(rows,wk!==ws)}${rows.length?`<table class="simple board"><tr><th></th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.user_id===ME.user.id?'me':''}"><td>${esc(r.name)}</td>${cols.map(c=>cell(c,r)).join('')}</tr>`).join('')}</table>`:'<p class="muted">Nobody logged anything that week.</p>'}
+    <div class="muted" style="margin-top:8px">${rows.length<2&&wk===ws?'Only you so far. Your friends show up here once they log. ':''}Strength is the average change in your best sets over the last 4 weeks. Only these totals and the name of your latest session are shared.</div></div>`;
 }
 
 // ---------- toast ----------
@@ -765,7 +786,7 @@ function viewToday(){
   h+=hero(d,t);
   {const sk=streaks(),plan=plannedPerWeek(),wk=weekStats(weekStart(k));
    h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">${trainedDates().has(k)?'Open workout ✓':'Open workout'}</button>`}</div>
-    ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div></div>`}
+    ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div>${isToday?buddyLine():''}</div>`}
   const fld=(f,l,ph,step='0.1')=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" data-day="${f}" value="${d[f]??''}" placeholder="${ph}"></label>`;
   h+=`<div class="card"><h2>Body & habits</h2><div class="grid2">
    ${fld('weight','Weight (lbs, morning)',(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})())}${fld('sleep','Sleep (hrs)','7.5')}
@@ -1604,7 +1625,7 @@ function accountUI(){
    <label class="f" style="margin-top:12px">New password<input id="acpw" type="password" autocomplete="new-password" placeholder="at least 8 characters"></label>
    <div class="row" style="margin-top:8px"><button class="small" data-act="pwchange">Change password</button><span class="muted">${esc(S.pwMsg||'')}</span></div>
    <label class="check" style="margin-top:14px"><input type="checkbox" id="acboard" ${sharing()?'checked':''}> Show me on the board</label>
-   <div class="muted" style="margin-top:4px">Shares four weekly totals with the other people on this app: workouts, protein days, average steps and strength change. Never your food, weight or lifts.</div>
+   <div class="muted" style="margin-top:4px">Shares weekly totals with the other people on this app: workouts done and planned, protein days, average steps, strength change, and the name and day of your latest session. Never your food, weight or lifts.</div>
    <button class="small" data-act="signout" style="margin-top:14px">Sign out</button></div>`;
 }
 async function saveName(){const v=($('#acname').value||'').trim().slice(0,40);const {error}=await SB.from('profiles').update({display_name:v}).eq('id',ME.user.id);S.nameMsg=error?'Couldn’t save the name.':'Saved ✓';if(!error&&ME.profile)ME.profile.display_name=v;render()}

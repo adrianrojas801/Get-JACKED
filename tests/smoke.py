@@ -213,7 +213,8 @@ async def main():
                                                    "sets": [{"w": 40, "r": r, "d": True} for r in (10, 10, 9)]})
         for n in (2, 3, 4):
             seed[f"days/{ago(n)}"] = {"date": ago(n), "food": [], "weight": 171}
-        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2}]
+        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2,
+                  "planned": 3, "last_workout": ago(0), "last_title": "Push"}]
         page = await new_page(browser, errors, seed, buddy)
         await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
         app = (await page.inner_text("#app")).lower()
@@ -230,6 +231,7 @@ async def main():
         food = await page.evaluate(f"(window.__docs['days/{ago(0)}']||{{}}).food||[]")
         check(len(food) == 1 and food[0]["n"] == "Burrito" and "700" in await page.inner_text("#hero"),
               "Tapping a recent food logs it and updates the rings")
+        check("sam finished push today" in (await page.inner_text("#app")).lower(), "Today shows that your friend trained")
 
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
@@ -250,8 +252,12 @@ async def main():
         mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
         check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
               "The board shows you next to your friend, with only weekly totals shared")
-        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at"},
+        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at",
+                               "planned", "last_workout", "last_title"}
+              and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
               "Nothing else is sent to the board")
+        check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
+              "The board shows the shared weekly goal")
 
         check("sets per muscle" in app and "lats" in app, "Progress shows weekly sets per muscle")
         await page.click("button[data-act=focus][data-k=lats]"); await page.wait_for_timeout(300)
