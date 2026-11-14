@@ -35,7 +35,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 | `manifest.webmanifest`, `icons/` | PWA name, colors and icons |
 | `supabase/migrations/` | All schema changes, as `YYYYMMDDHHMMSS_short_name.sql` (`20261113000000_init.sql` is the base) |
 | `supabase/config.toml` | Minimal CLI project file. Never run `supabase config push`: auth settings are managed by the Deploy workflow. |
-| `tests/` | `check_syntax.js`, `check_sql.py`, `smoke.py` with `mock-supabase.js` |
+| `tests/` | `check_syntax.js`, `check_sql.py`, `check_db.py` (with `db/supabase_shim.sql`), `smoke.py` with `mock-supabase.js` |
 | `.github/workflows/` | `ci.yml` (every PR and `main`), `deploy.yml` (Supabase migrations and auth settings after CI passes on `main`) and `labeler.yml` (path labels on PRs) |
 | `.github/labeler.yml` | Which paths get the `app`, `database`, `ci` and `docs` labels |
 | `README.md` | Human setup guide |
@@ -65,11 +65,13 @@ CI (`.github/workflows/ci.yml`) runs these on every PR. Run them locally before 
 
 ```bash
 node tests/check_syntax.js     # inline <script> + config.js syntax
-python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, file naming
+python3 tests/check_sql.py     # migrations parse, RLS on every table, no anon grants, definer functions locked down, naming
+python3 tests/check_db.py      # runs migrations twice on a local Postgres and checks who can read/write what
 python3 tests/smoke.py         # headless sign-in, intake, editor, save, reload (mocked Supabase)
 ```
 
 - `main`'s ruleset requires one check: **Merge gate**, which passes only when every other CI job passed. When you add a CI job, add it to the gate's `needs:` list, or it won't block merging.
+- When you add a table, policy or function, **extend `tests/check_db.py`** to prove who can and can't use it.
 - When you add a feature, **extend `tests/smoke.py`** (and `tests/mock-supabase.js` if you need new Supabase calls) to cover it.
 - Migrations must be re-runnable (`if not exists`, `drop policy if exists`) and must never be edited after they've been merged. Add a new file instead.
 - Put what was tested, and what wasn't, in the PR's Testing section.
