@@ -1,6 +1,6 @@
 """Headless smoke test: sign-in, intake, program editor, account page, save, migration, reload.
 Runs against tests/mock-supabase.js."""
-import asyncio, json, os, pathlib, sys
+import asyncio, datetime, json, os, pathlib, sys
 from playwright.async_api import async_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -27,10 +27,11 @@ def write_summary(errors):
         f.write("\n".join(lines) + "\n")
 
 
-async def new_page(browser, errors, seed=None):
+async def new_page(browser, errors, seed=None, board=None):
     ctx = await browser.new_context(viewport={"width": 390, "height": 844})
-    if seed is not None:
-        await ctx.add_init_script(f"if(!sessionStorage.getItem('mockdocs'))sessionStorage.setItem('mockdocs',{json.dumps(json.dumps(seed))})")
+    for key, rows in (("mockdocs", seed), ("mockboard", board)):
+        if rows is not None:
+            await ctx.add_init_script(f"if(!sessionStorage.getItem('{key}'))sessionStorage.setItem('{key}',{json.dumps(json.dumps(rows))})")
     page = await ctx.new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
     await page.route("**/vendor/supabase.js", lambda r: r.fulfill(body=MOCK, content_type="text/javascript"))
@@ -194,6 +195,61 @@ async def main():
         reqs = await page.evaluate("window.__reqs")
         check(len(reqs) == 1 and reqs[0]["answers"]["focus"] == "Upper chest and side delts" and "intakePending" not in await settings(page),
               "Send now delivers them from the account page")
+        await page.context.close()
+
+        # ---- someone with a few weeks of history ----
+        today = datetime.date.today()
+        ago = lambda n: (today - datetime.timedelta(days=n)).isoformat()
+        sunday = ago((today.weekday() + 1) % 7)
+        lift = lambda w, r: {"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90, "ti": 0, "sets": [{"w": w, "r": r, "d": True}] * 3}
+        seed = {"settings/main": {"cal": 2400, "pro": 150, "goal": 170, "program": {
+                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90}]}},
+                    "order": ["a"], "sched": ["a"] * 7}},
+                f"days/{ago(1)}": {"date": ago(1), "food": [{"n": "Burrito", "c": 700, "p": 40, "q": 1}], "steps": 9000}}
+        for n, reps in ((35, 10), (28, 8), (21, 8), (7, 8)):  # best 5 weeks ago, then three sessions without beating it
+            seed[f"workouts/{ago(n)}_a"] = {"date": ago(n), "prog": "a", "title": "Back day", "done": True, "ex": [lift(120, reps)]}
+        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2}]
+        page = await new_page(browser, errors, seed, buddy)
+        await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
+        app = (await page.inner_text("#app")).lower()
+        check(await page.locator("#hero .ring").count() == 3 and await page.locator(".wkstrip .wd").count() == 7
+              and "workouts this week" in app, "Today shows the three rings and the week strip")
+        check("recent" in app and "same as yesterday" in app and "idea:" in app,
+              "Today offers recent foods, yesterday's log and a protein idea")
+        await page.click("button[data-act=recent]"); await page.wait_for_timeout(300)
+        food = await page.evaluate(f"(window.__docs['days/{ago(0)}']||{{}}).food||[]")
+        check(len(food) == 1 and food[0]["n"] == "Burrito" and "700" in await page.inner_text("#hero"),
+              "Tapping a recent food logs it and updates the rings")
+
+        await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
+        check("no new best in 3 sessions" in (await page.inner_text("#app")).lower(), "A stalled lift gets a back-off suggestion")
+        await page.fill("input[data-w='0'][data-s='0'][data-f=w]", "125"); await page.fill("input[data-w='0'][data-s='0'][data-f=r]", "10")
+        await page.click("button[data-act=setdone]"); await page.wait_for_timeout(300)
+        check("New best: Lat pulldown 125×10" in await page.inner_text("#toast"), "Beating your best shows a toast")
+        await page.click("button[data-act=finish]"); await page.wait_for_timeout(300)
+        check("new bests: lat pulldown 125×10" in (await page.inner_text("#app")).lower(), "The finish summary lists the new best")
+
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(3800)
+        app = (await page.inner_text("#app")).lower()
+        check("records" in app and "lifts this week" in app and "125×10" in app, "Progress shows records and this week's lifts")
+        mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
+        check("sam" in app and "pablo" in app and len(mine) == 1 and mine[0]["workouts"] == 1 and mine[0]["protein_days"] == 0,
+              "The board shows you next to your friend, with only weekly totals shared")
+        check(set(mine[0]) <= {"user_id", "week", "name", "workouts", "protein_days", "steps", "strength", "updated_at"},
+              "Nothing else is sent to the board")
+
+        await page.click("#me"); await page.wait_for_timeout(300)
+        await page.click("#acboard"); await page.wait_for_timeout(300)
+        check(not [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1"] and (await settings(page)).get("board") is False,
+              "Turning sharing off removes you from the board")
+        await page.click("button[data-act=stepnew]"); await page.wait_for_timeout(300)
+        app = await page.inner_text("#app")
+        check("Get Contents of URL" in app and "/rest/v1/rpc/log_steps" in await page.content() and "tok_" in await page.content(),
+              "Automatic steps shows the Shortcut steps, URL and token")
+        await page.click("button[data-act=stepdone]"); await page.wait_for_timeout(200)
+        check("Automatic steps are on" in await page.inner_text("#app"), "Automatic steps shows as on afterwards")
+        await page.click("button[data-act=stepoff]"); await page.wait_for_timeout(300)
+        check("set up automatic steps" in (await page.inner_text("#app")).lower(), "Automatic steps can be turned off")
         await browser.close()
     write_summary(errors)
     if errors:
