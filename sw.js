@@ -1,8 +1,10 @@
 // Service worker: keeps the app's own files on the phone so Get Jacked opens with no signal.
 // Your data is not cached here. index.html keeps its own copy (see "offline copy" there).
 // Bump CACHE when the list of files changes.
-const CACHE = 'gj-shell-v1';
-const SHELL = ['./', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icons/icon-192.png?v=2', 'icons/apple-touch-icon.png?v=2'];
+const CACHE = 'gj-shell-v2';
+const SHELL = ['./', 'config.js', 'vendor/supabase.js', 'css/app.css',
+  'js/program.js', 'js/core.js', 'js/training.js', 'js/shared.js', 'js/today.js', 'js/workout.js', 'js/progress.js', 'js/plan.js', 'js/events.js', 'js/app.js',
+  'manifest.webmanifest', 'icons/icon-192.png?v=2', 'icons/apple-touch-icon.png?v=2'];
 const WAIT_MS = 3500; // on a weak signal, stop waiting for the network and open the saved copy
 
 self.addEventListener('install', e => {
@@ -11,6 +13,20 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+
+// Reminders: show what the send-reminders function sent, and open the app when it's tapped.
+self.addEventListener('push', e => {
+  let msg = {};
+  try { msg = e.data ? e.data.json() : {}; } catch (err) { /* not JSON: fall back to the default text */ }
+  e.waitUntil(self.registration.showNotification(msg.title || 'Get Jacked', {
+    body: msg.body || '', icon: 'icons/icon-192.png?v=2', badge: 'icons/icon-192.png?v=2', data: { url: msg.url || './' },
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list =>
+    list.length ? list[0].focus() : self.clients.openWindow(e.notification.data.url)));
 });
 
 // Network first, so a new deploy shows up right away; the saved copy is the fallback.

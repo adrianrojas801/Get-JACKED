@@ -4,6 +4,7 @@ window.__docs=JSON.parse(sessionStorage.getItem('mockdocs')||'{}');window.__call
 // intake_requests rows, also kept across reloads. Every user in the mock is the same admin.
 window.__reqs=JSON.parse(sessionStorage.getItem('mockreqs')||'[]');
 // Shared board rows and the steps link, also kept across reloads.
+window.__photos=[];
 window.__board=JSON.parse(sessionStorage.getItem('mockboard')||'[]');window.__steptok=JSON.parse(sessionStorage.getItem('mocksteptok')||'null');
 const persist=()=>{sessionStorage.setItem('mockdocs',JSON.stringify(__docs));sessionStorage.setItem('mockreqs',JSON.stringify(__reqs));sessionStorage.setItem('mockboard',JSON.stringify(__board));sessionStorage.setItem('mocksteptok',JSON.stringify(__steptok))};
 // Set sessionStorage.mockoffline = '1' to make every request fail the way it does with no signal.
@@ -61,6 +62,18 @@ window.supabase={createClient(){
       if(n==='new_steps_token'){__steptok={created_at:new Date().toISOString(),last_used:null};persist();return {data:'tok_'+'a'.repeat(60),error:null}}
       if(n==='mark_intake_applied'){const r=__reqs.find(x=>x.id===a.p_id&&x.status==='sent');if(r){r.status='applied';persist()}return {error:null}}
       const k=key(a.p_coll,a.p_id);__docs[k]=Object.assign(__docs[k]||{},JSON.parse(JSON.stringify(a.p_patch)));persist();return {error:null}},
+    // Storage keeps only file paths; every signed link is the same 1×1 image.
+    storage:{from(){const fail=()=>({data:null,error:{message:'TypeError: Failed to fetch'}});return {
+      list:async prefix=>offline()?fail():{data:__photos.filter(p=>p.startsWith(prefix+'/')).sort().map(p=>({name:p.slice(prefix.length+1)})),error:null},
+      upload:async(path,blob)=>{if(offline())return fail();window.__lastUpload={path,type:blob&&blob.type,size:blob&&blob.size};__photos.push(path);return {data:{path},error:null}},
+      createSignedUrls:async paths=>offline()?fail():{data:paths.map(()=>({signedUrl:'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='})),error:null},
+      remove:async paths=>{if(offline())return fail();__photos=__photos.filter(p=>!paths.includes(p));return {data:[],error:null}}}}},
+    // Edge Functions. Photo estimates report "ready" only when sessionStorage.mockest is '1'.
+    functions:{invoke:async(name,{body})=>{__calls.push(['fn',name]);
+      if(offline())return {data:null,error:{message:'Failed to send a request to the Edge Function'}};
+      if(name!=='food-estimate')return {data:null,error:{message:'not found'}};
+      if(body.ping)return {data:{ready:sessionStorage.getItem('mockest')==='1'},error:null};
+      window.__lastEstimate=body;return {data:{items:[{n:'Test taco',c:150,p:9,q:3}],note:'Assumed corn tortillas.'},error:null}}},
     channel(){const c={on(){return c},subscribe(){return c}};return c}
   };
 }};

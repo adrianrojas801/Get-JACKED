@@ -99,6 +99,9 @@ async def main():
               "Tabs come back after the intake")
 
         await page.click("button[data-act=quick]")
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(400)
+        check("snap or describe" not in (await page.inner_text(".sheet")).lower(), "Photo estimates stay hidden until they're set up")
+        await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
         await page.fill("input[data-day=weight]", "170.2"); await page.wait_for_timeout(1500)
         docs = await page.evaluate("JSON.stringify(window.__docs)")
         check("170.2" in docs and '"food":[{' in docs, "Quick-add food and weight save")
@@ -222,8 +225,12 @@ async def main():
                                                    "sets": [{"w": 40, "r": r, "d": True} for r in (10, 10, 9)]})
         for n in (2, 3, 4):
             seed[f"days/{ago(n)}"] = {"date": ago(n), "food": [], "weight": 171}
-        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2,
-                  "planned": 3, "last_workout": ago(0), "last_title": "Push"}]
+        seed[f"days/{ago(2)}"].update({"chest": 40, "arm": 14.25, "waist": 32})
+        seed[f"days/{ago(20)}"] = {"date": ago(20), "food": [], "chest": 39.5, "arm": 14, "waist": 32}
+        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 6.5,
+                  "planned": 3, "last_workout": ago(0), "last_title": "Push"},
+                 {"user_id": "u2", "week": ago((today.weekday() + 1) % 7 + 7), "name": "sam", "workouts": 3, "protein_days": 5, "steps": 8000,
+                  "strength": 2.0, "planned": 3, "last_workout": ago(8), "last_title": "Legs"}]
         page = await new_page(browser, errors, seed, buddy)
         await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
         app = (await page.inner_text("#app")).lower()
@@ -245,7 +252,16 @@ async def main():
               "Tapping a recent food logs it and updates the rings")
         check("sam finished push today" in (await page.inner_text("#app")).lower(), "Today shows that your friend trained")
 
-        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
+        await page.evaluate("sessionStorage.setItem('mockest','1')")
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(400)
+        check("snap or describe" in (await page.inner_text(".sheet")).lower(), "Photo estimates appear once the server function says it's ready")
+        await page.fill("#snaptxt", "3 tacos"); await page.click("button[data-act=snap]"); await page.wait_for_timeout(400)
+        sent = await page.evaluate("window.__lastEstimate")
+        check(await page.input_value("input[data-sn='0'][data-sf=n]") == "Test taco" and sent["note"] == "3 tacos" and "who" in sent and "prompt" not in sent,
+              "An estimate comes back for review; the app sends only the note and who is eating")
+        await page.click("button[data-act=snapadd]"); await page.wait_for_timeout(300)
+        check(any(f["n"] == "Test taco" and f["q"] == 3 for f in (await page.evaluate(f"window.__docs['days/{ago(0)}']"))["food"]),
+              "Adding the estimate logs it")
         sheet = (await page.inner_text(".sheet")).lower()
         check("all foods" in sheet and "recent" in sheet and "greek yogurt" in sheet, "All foods opens the full list as a sheet")
         await page.fill("#fsearch", "greek"); await page.wait_for_timeout(150)
@@ -287,9 +303,24 @@ async def main():
 
         await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
         app = (await page.inner_text("#app")).lower()
-        check(await page.locator(".seg button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
+        check(await page.locator(".seg[role=tablist] button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
               "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        png = __import__("base64").b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+        for stamp in ("a", "b"):
+            await page.set_input_files("#photofile", {"name": f"{stamp}.png", "mimeType": "image/png", "buffer": png}); await page.wait_for_timeout(500)
+        up = await page.evaluate("window.__lastUpload")
+        check(up["path"].startswith(f"u1/{ago(0)}_front_") and up["path"].endswith(".jpg") and up["type"] == "image/jpeg"
+              and await page.locator(".pcompare img").count() == 2,
+              "A progress photo is shrunk to a JPEG, stored in your own folder, and shown first against latest")
+        await page.click("button[data-act=photoall]"); await page.wait_for_timeout(150)
+        await page.click("button[data-act=photodel]"); await page.wait_for_timeout(150)
+        still = len(await page.evaluate("window.__photos"))
+        await page.click("button[data-act=photodel]"); await page.wait_for_timeout(400)
+        check(still == 2 and len(await page.evaluate("window.__photos")) == 1, "Deleting a photo takes two taps")
+        app = (await page.inner_text("#app")).lower()
+        check("measurements" in app and '+0.5"' in app and "chest, arm are growing" in app and "next measurement" in app,
+              "Body shows tape measurements, first against latest")
         await page.click("button[data-act=phase][data-i='0']"); await page.wait_for_timeout(300)
         s = await settings(page)
         check(s["profile"]["goal"] == "cut" and s["cal"] == 1750 and s["pro"] == 170 and s["goal"] == 162 and s["phaseStart"] == ago(0),
@@ -311,7 +342,30 @@ async def main():
         check((await settings(page)).get("focus") == ["lats"] and "lats is a focus but under 10 sets" in (await page.inner_text("#app")).lower(),
               "Marking a focus muscle saves it and flags it when it's under 10 sets")
 
-        await page.wait_for_timeout(3300)
+        # The plan adapts: a focus muscle nothing trains gets a suggested lift, applied with one tap and undoable.
+        check(await page.evaluate("Object.entries(MOVES).every(([m,list])=>list.every(x=>(musFor(x[0])||{p:[]}).p.includes(m)))"),
+              "Every suggested move is mapped to the muscle it's suggested for")
+        await page.click("svg.mfig-xl path[data-mus=quads]"); await page.wait_for_timeout(200)
+        await page.click(".banner button[data-act=focus][data-k=quads]"); await page.wait_for_timeout(300)
+        await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(300)
+        plan_txt = (await page.inner_text("#app")).lower()
+        check("suggested changes" in plan_txt and "add leg extension (3 × 10-15) to back day" in plan_txt and "add a set of lat pulldown" not in plan_txt,
+              "Plan suggests a lift for a focus muscle the program doesn't train, and leaves well-covered ones alone")
+        await page.click("button[data-act=sugdo]"); await page.wait_for_timeout(300)
+        ex = (await settings(page))["program"]["days"]["a"]["ex"]
+        check(len(ex) == 3 and ex[2] == {"n": "Leg extension", "s": 3, "r": "10-15", "rest": 90} and "Plan updated" in await page.inner_text("#toast"),
+              "Do it changes the program")
+        await page.click("#undo"); await page.wait_for_timeout(300)
+        check(len((await settings(page))["program"]["days"]["a"]["ex"]) == 2, "Undo puts the program back")
+        await page.click("button[data-act=sugskip]"); await page.wait_for_timeout(300)
+        check("suggested changes" not in (await page.inner_text("#app")).lower() and (await settings(page))["skipSug"] == {"add:quads": sunday},
+              "Not now hides a suggestion for the week")
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(200)
+        await page.fill("input[data-day=shoulders]", "48.5"); await page.wait_for_timeout(1000)
+        check((await page.evaluate(f"window.__docs['days/{ago(0)}']")).get("shoulders") == 48.5, "A measurement saves on the day's log")
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
+
+        await page.wait_for_timeout(3500)
         await page.click("button[data-act=psec][data-v=friends]"); await page.wait_for_timeout(500)
         app = (await page.inner_text("#app")).lower()
         mine = [r for r in await page.evaluate("window.__board") if r["user_id"] == "u1" and r["week"] == sunday]
@@ -321,6 +375,9 @@ async def main():
                                "planned", "last_workout", "last_title"}
               and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
               "Nothing else is sent to the board")
+        h2h = (await page.inner_text(".h2h")).lower().split()
+        check(h2h == ["3", "sam", "0", "you"] and "season · last 1 week" in app and "sam 1 · you 0" in app,
+              "Head to head scores this week line by line and keeps a season count of weeks won")
         check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
               "The board shows the shared weekly goal")
 
@@ -330,6 +387,7 @@ async def main():
               "Turning sharing off removes you from the board")
         await page.click("button[data-act=stepnew]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
+        check("reminders" not in app.lower(), "Reminders stay hidden until the push key is set")
         check("Get Contents of URL" in app and "/rest/v1/rpc/log_steps" in await page.content() and "tok_" in await page.content(),
               "Automatic steps shows the Shortcut steps, URL and token")
         await page.click("button[data-act=stepdone]"); await page.wait_for_timeout(200)

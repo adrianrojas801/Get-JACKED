@@ -4,7 +4,9 @@ A private workout, food and bodyweight tracker for a few people. It's a static w
 
 ## How it's put together
 
-- `index.html`: the whole app (UI and logic)
+- `index.html`, `css/app.css` and `js/`: the app. `index.html` is the page shell, and it loads the scripts in `js/` in order.
+- `sw.js`: lets the app open with no signal, and shows reminders
+- `supabase/functions/`: the two optional server functions (see Optional features)
 - `config.js`: the Supabase project URL and **publishable** key. This is public on purpose: row-level security keeps each person's data private.
 - `vendor/supabase.js`: supabase-js v2.119.0 browser build, kept in the repo so the app doesn't depend on a CDN
 - `manifest.webmanifest` and `icons/`: home-screen app name and icon
@@ -29,9 +31,53 @@ Logs are private. Two things are shared on purpose:
 
 Once you've opened the app on your phone while online, it opens and logs without a connection. The status under your initial says **Offline · saved on this phone**, and everything sends when you're back online. Signing out clears the copy kept on the phone.
 
+### Progress photos
+
+Photos you add under **Progress → Body** are stored privately. Only you can open them; nobody else on the app can, including the admin. Deleting one is permanent.
+
 ### Automatic steps
 
 Under your account, tap **Set up automatic steps** and follow the steps to build a Shortcut on your iPhone. It sends your Apple Health step count to the app with a personal token. **Make a new link** replaces the token, and **Turn off** deletes it.
+
+## Optional features (built, switched off)
+
+Two features need a server piece that only you can set up. Everything else is already in place, and both stay hidden in the app until you finish these steps.
+
+### Deploying the server functions (needed for both)
+
+1. In Supabase, go to **Account → Access Tokens** and make a new token with the same permissions as the current one, plus **Edge Functions** (read and write).
+2. In GitHub, go to **Settings → Secrets and variables → Actions** and replace the `SUPABASE_ACCESS_TOKEN` secret with the new token.
+3. On the **Variables** tab there, add `DEPLOY_FUNCTIONS` with the value `true`.
+4. Go to **Actions → Deploy → Run workflow**. From now on every deploy also deploys the functions.
+
+### Photo food estimates
+
+1. Make an API key at console.anthropic.com and set a monthly spending limit there.
+2. In Supabase, go to **Edge Functions → Secrets** and add `ANTHROPIC_API_KEY` with that key.
+3. Do "Deploying the server functions" above if you haven't.
+4. Open the app, tap **All foods**, and **Snap or describe** is there.
+
+Each person gets 20 estimates a day. To change that, add a secret named `FOOD_DAILY_LIMIT`. To use a different model, add `FOOD_MODEL`.
+
+### Reminders
+
+1. On any computer, run `npx web-push generate-vapid-keys`. It prints a public key and a private key.
+2. In Supabase, go to **Edge Functions → Secrets** and add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:` plus your email) and `CRON_SECRET` (any long random text).
+3. Put the **public** key in `config.js` as `vapidPublicKey` and merge that change. The private key never goes in the repo.
+4. Do "Deploying the server functions" above if you haven't.
+5. In Supabase, go to **Database → Extensions** and turn on `pg_cron` and `pg_net`.
+6. In the **SQL Editor**, run this once, with your project ref and your `CRON_SECRET` filled in:
+
+   ```sql
+   select cron.schedule('gj-reminders', '0 * * * *', $$
+     select net.http_post(
+       url := 'https://YOUR-PROJECT-REF.supabase.co/functions/v1/send-reminders',
+       headers := '{"x-cron-secret": "YOUR-CRON-SECRET"}'::jsonb
+     )
+   $$);
+   ```
+
+7. On your iPhone, open the app from the home screen, tap your initial, and tap **Turn on reminders**.
 
 ## How deploys work
 

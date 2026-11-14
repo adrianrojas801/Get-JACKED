@@ -148,6 +148,42 @@ def main():
               "Making a new link turns the old one off")
         psql("delete from public.step_tokens", A)
         check(anon(f"select public.log_steps('{tok2}', 1)").returncode != 0, "Turning automatic steps off kills the link")
+        # Progress photos: a private bucket, one folder per person.
+        obj = lambda owner, who: f"insert into storage.objects (bucket_id, name) values ('progress', '{owner}/2026-11-14_front_1.jpg')"
+        psql(obj(A, A), A)
+        check(val("select public::text || ':' || file_size_limit from storage.buckets where id = 'progress'") == "false:3145728",
+              "The photo bucket is private and size-limited")
+        check(val("select count(*) from storage.objects", A) == "1", "A person can add and see their own progress photos")
+        check(val("select count(*) from storage.objects", B) == "0" and val("select count(*) from storage.objects", ADMIN) == "0",
+              "Nobody else can see them, the admin included")
+        check(fails(obj(A, B).replace("_1.jpg", "_2.jpg"), B), "Nobody can put a photo in someone else's folder")
+        check(fails("insert into storage.objects (bucket_id, name) values ('progress', 'loose.jpg')", A), "Photos outside a personal folder are refused")
+        psql("delete from storage.objects", B)
+        check(val("select count(*) from storage.objects", A) == "1", "Nobody can delete someone else's photos")
+        psql("delete from storage.objects", A)
+        check(val("select count(*) from storage.objects") == "0", "A person can delete their own photos")
+        check(psql("set role anon; select count(*) from storage.objects", ok=False).stdout.strip().endswith("0")
+              and psql(f"set role anon; {obj(A, A)}", ok=False).returncode != 0, "Signed-out visitors can't see or add photos")
+        # Photo estimates: a daily allowance per person.
+        check(val("select public.use_ai('food', 2)::text || public.use_ai('food', 2)::text || public.use_ai('food', 2)::text", A) == "truetruefalse"
+              and val("select n from public.ai_usage", A) == "2", "Photo estimates stop at the daily limit")
+        check(val("select public.use_ai('food', 2)", B) == "t" and val("select count(*) from public.ai_usage", B) == "1",
+              "Each person has their own allowance and sees only their own count")
+        check(fails("update public.ai_usage set n = 0", A) and fails("insert into public.ai_usage (kind) values ('food')", A)
+              and psql("set role anon; select public.use_ai('food', 5)", ok=False).returncode != 0,
+              "The count can't be reset by hand, and signed-out callers can't use it")
+        # Reminders: push subscriptions.
+        sub = "(endpoint, p256dh, auth) values ('https://push.example.com/abcdefghij', 'k', 'a')"
+        psql(f"insert into public.push_subs {sub}", A)
+        check(val("select count(*) from public.push_subs", B) == "0" and val("select count(*) from public.push_subs", ADMIN) == "0",
+              "Nobody else can see a person's reminder subscription")
+        psql("update public.push_subs set morning = 3", B)
+        check(val("select morning from public.push_subs", A) == "8" and fails("update public.push_subs set morning = 30", A),
+              "Only the owner can change reminder times, and only to real hours")
+        check(fails(f"insert into public.push_subs (user_id, endpoint, p256dh, auth) values ('{A}', 'https://push.example.com/zzzzzzzzzzzz', 'k', 'a')", B),
+              "Nobody can subscribe a device as someone else")
+        psql("delete from public.push_subs", A)
+        check(val("select count(*) from public.push_subs") == "0", "A person can remove their own subscription")
     except Exception as e:  # a setup step failed
         check(False, f"Database test setup: {e}")
     finally:
