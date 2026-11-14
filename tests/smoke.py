@@ -224,8 +224,10 @@ async def main():
             seed[f"days/{ago(n)}"] = {"date": ago(n), "food": [], "weight": 171}
         seed[f"days/{ago(2)}"].update({"chest": 40, "arm": 14.25, "waist": 32})
         seed[f"days/{ago(20)}"] = {"date": ago(20), "food": [], "chest": 39.5, "arm": 14, "waist": 32}
-        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2,
-                  "planned": 3, "last_workout": ago(0), "last_title": "Push"}]
+        buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 6.5,
+                  "planned": 3, "last_workout": ago(0), "last_title": "Push"},
+                 {"user_id": "u2", "week": ago((today.weekday() + 1) % 7 + 7), "name": "sam", "workouts": 3, "protein_days": 5, "steps": 8000,
+                  "strength": 2.0, "planned": 3, "last_workout": ago(8), "last_title": "Legs"}]
         page = await new_page(browser, errors, seed, buddy)
         await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
         app = (await page.inner_text("#app")).lower()
@@ -361,6 +363,9 @@ async def main():
                                "planned", "last_workout", "last_title"}
               and mine[0]["planned"] == 7 and mine[0]["last_title"] == "Back day" and mine[0]["last_workout"] == ago(0),
               "Nothing else is sent to the board")
+        h2h = (await page.inner_text(".h2h")).lower().split()
+        check(h2h == ["3", "sam", "0", "you"] and "season · last 1 week" in app and "sam 1 · you 0" in app,
+              "Head to head scores this week line by line and keeps a season count of weeks won")
         check("team goal" in app and "sam 3/3 ✓" in app and "pablo 1/7" in app and "6 workouts to go" in app,
               "The board shows the shared weekly goal")
 
