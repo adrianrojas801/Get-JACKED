@@ -203,11 +203,14 @@ async def main():
         sunday = ago((today.weekday() + 1) % 7)
         lift = lambda w, r: {"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90, "ti": 0, "sets": [{"w": w, "r": r, "d": True}] * 3}
         seed = {"settings/main": {"cal": 2400, "pro": 150, "goal": 170, "program": {
-                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90}]}},
+                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90},
+                                                           {"n": "Cable curl", "s": 3, "r": "10-12", "rest": 60}]}},
                     "order": ["a"], "sched": ["a"] * 7}},
                 f"days/{ago(1)}": {"date": ago(1), "food": [{"n": "Burrito", "c": 700, "p": 40, "q": 1}], "steps": 9000}}
         for n, reps in ((35, 10), (28, 8), (21, 8), (7, 8)):  # best 5 weeks ago, then three sessions without beating it
             seed[f"workouts/{ago(n)}_a"] = {"date": ago(n), "prog": "a", "title": "Back day", "done": True, "ex": [lift(120, reps)]}
+        seed[f"workouts/{ago(7)}_a"]["ex"].append({"n": "Cable curl", "s": 3, "r": "10-12", "rest": 60, "ti": 1,
+                                                   "sets": [{"w": 40, "r": r, "d": True} for r in (10, 10, 9)]})
         buddy = [{"user_id": "u2", "week": sunday, "name": "sam", "workouts": 3, "protein_days": 2, "steps": 7000, "strength": 4.2}]
         page = await new_page(browser, errors, seed, buddy)
         await page.goto(URL); await page.wait_for_timeout(300); await sign_in(page)
@@ -222,7 +225,12 @@ async def main():
               "Tapping a recent food logs it and updates the rings")
 
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
-        check("no new best in 3 sessions" in (await page.inner_text("#app")).lower(), "A stalled lift gets a back-off suggestion")
+        app = await page.inner_text("#app")
+        check("no new best in 3 sessions" in app.lower() and "110 × 12, 12, 12" in app, "A stalled lift gets a back-off suggestion and a lighter target")
+        check("40 × 11, 10, 9" in app, "Each exercise shows today's target: last time plus one rep")
+        await page.click("button[data-act=setdone][data-i='1'][data-j='0']"); await page.wait_for_timeout(300)
+        done = (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']"))["ex"][1]["sets"][0]
+        check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
         await page.fill("input[data-w='0'][data-s='0'][data-f=w]", "125"); await page.fill("input[data-w='0'][data-s='0'][data-f=r]", "10")
         await page.click("button[data-act=setdone]"); await page.wait_for_timeout(300)
         check("New best: Lat pulldown 125×10" in await page.inner_text("#toast"), "Beating your best shows a toast")
