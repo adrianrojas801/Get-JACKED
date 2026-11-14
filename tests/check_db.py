@@ -125,7 +125,8 @@ def main():
         check(fails(f"insert into public.step_tokens (user_id, token_hash) values ('{B}', 'x')", B),
               "Tokens can only be made through the function")
         anon = lambda sql: psql(f"set role anon; {sql}", ok=False)
-        psql("insert into public.docs (coll, id, data) values ('days', current_date::text, '{\"weight\":171}')", A)
+        psql("insert into public.docs (coll, id, data) values ('days', current_date::text, '{\"weight\":171}') "
+             "on conflict (user_id, coll, id) do update set data = excluded.data", A)
         today = f"from public.docs where user_id = '{A}' and id = current_date::text"
         check(anon(f"select public.log_steps('{tok}', 9123)").returncode == 0 and val(f"select data ->> 'steps' {today}") == "9123",
               "The Shortcut (signed out, with the token) can set today's steps")
