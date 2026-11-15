@@ -118,15 +118,15 @@ function foodSheet(){
 }
 
 // The estimate and its review rows, shared by the Add foods sheet and the camera sheet.
-function snapResult(sn,save,compact){
+function snapResult(sn,save){
   let h='';
   if(sn.err)h+=`<div class="warn" style="margin-top:6px">${esc(sn.err)}</div>`;
   if(sn.items){
     if(!sn.items.length)h+=`<div class="muted" style="margin-top:6px">${esc(sn.note||'Nothing to add.')}</div>`;
     else{const tc=sn.items.reduce((a,x)=>a+x.c*x.q,0),tp=sn.items.reduce((a,x)=>a+x.p*x.q,0);
       h+=`<div class="banner" style="margin-top:8px"><div class="snaprow muted" style="margin-top:0"><span>Food</span><span>cal</span><span>prot g</span><span>qty</span><span></span></div>`+
-      sn.items.map((x,i)=>`<div class="snaprow"><input data-sn="${i}" data-sf="n" value="${esc(compact?String(x.n).slice(0,28):x.n)}"${compact?' maxlength="28"':''}><input data-sn="${i}" data-sf="c" type="number" inputmode="numeric" value="${x.c}"><input data-sn="${i}" data-sf="p" type="number" inputmode="decimal" value="${x.p}"><input data-sn="${i}" data-sf="q" type="number" inputmode="numeric" value="${x.q}"><button class="small" data-act="snapdel" data-i="${i}">✕</button></div>`).join('')+
-      `<div class="muted" style="margin-top:6px">Total ≈ ${fmt(tc)} cal · ${fmt(tp)} g protein${sn.note?' · '+esc(compact?String(sn.note).slice(0,60):sn.note):''}</div>
+      sn.items.map((x,i)=>`<div class="snaprow"><input data-sn="${i}" data-sf="n" value="${esc(x.n)}"><input data-sn="${i}" data-sf="c" type="number" inputmode="numeric" value="${x.c}"><input data-sn="${i}" data-sf="p" type="number" inputmode="decimal" value="${x.p}"><input data-sn="${i}" data-sf="q" type="number" inputmode="numeric" value="${x.q}"><button class="small" data-act="snapdel" data-i="${i}">✕</button></div>`).join('')+
+      `<div class="muted" style="margin-top:6px">Total ≈ ${fmt(tc)} cal · ${fmt(tp)} g protein${sn.note?' · '+esc(sn.note):''}</div>
       ${save?`<label class="check" style="margin-top:8px;font-size:14px"><input type="checkbox" id="snapsave"> Also save these as quick-add buttons</label>`:''}
       <div class="row" style="margin-top:8px"><button class="primary" data-act="snapadd">Add to log</button><button data-act="snapcancel">Discard</button></div></div>`}
   }
@@ -141,9 +141,9 @@ function camButton(){
 function camSheet(){
   const sn=S.snap||{};
   let h=`<div class="sheet" role="dialog" aria-label="Food photo"><div class="sheethead"><h2>Food photo</h2><div class="row"><button class="small" data-act="camx">Cancel</button></div></div>`;
-  if(S.snapUrl)h+=`<img class="campic${sn.items?' thumb':''}" src="${S.snapUrl}" alt="Your food photo">`;
-  if(!sn.items)h+=`<div class="row" style="margin-top:10px"><button class="primary grow" data-act="snap" ${sn.busy?'disabled':''}>${sn.busy?'Estimating… (can take ~30 sec)':'Send'}</button>${sn.busy?'':'<label class="btn" for="camretake">Retake</label><input type="file" id="camretake" accept="image/*" capture="environment" hidden>'}</div>`;
-  return h+snapResult(sn,false,true)+`</div>`;
+  if(S.snapUrl)h+=`<img class="campic" src="${S.snapUrl}" alt="Your food photo">`;
+  if(!sn.items)h+=`<input id="camnote" maxlength="60" placeholder="Optional note, e.g. double chicken" value="${esc(S.snapTxt||'')}" ${sn.busy?'disabled':''} style="margin-top:10px;width:100%"><div class="row" style="margin-top:10px"><button class="primary grow" data-act="snap" ${sn.busy?'disabled':''}>${sn.busy?'Estimating… (can take ~30 sec)':'Send'}</button>${sn.busy?'':'<label class="btn" for="camretake">Retake</label><input type="file" id="camretake" accept="image/*" capture="environment" hidden>'}</div>`;
+  return h+snapResult(sn,false)+`</div>`;
 }
 function snapUI(){
   if(!S.sample||S.sampleOff)return '';

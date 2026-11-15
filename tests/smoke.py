@@ -292,10 +292,10 @@ async def main():
         await page.set_input_files("#camfile", {"name": "plate.png", "mimeType": "image/png", "buffer": cam_png}); await page.wait_for_timeout(300)
         check(await page.is_visible(".campic") and await page.is_visible("button[data-act=snap]") and not await page.evaluate("window.__lastEstimate"),
               "Taking a photo shows it with Send and Retake, and nothing is sent yet")
-        await page.click("button[data-act=snap]"); await page.wait_for_timeout(600)
+        await page.fill("#camnote", "double chicken"); await page.click("button[data-act=snap]"); await page.wait_for_timeout(600)
         sent = await page.evaluate("window.__lastEstimate")
-        check(sent and sent["note"] == "" and sent.get("image") and await page.is_visible("input[data-sn='0'][data-sf=n]") and not await page.is_visible("#snapsave"),
-              "Send sends only the photo, then the estimate comes back for review")
+        check(sent and sent["note"] == "double chicken" and sent.get("image") and await page.is_visible("input[data-sn='0'][data-sf=n]") and not await page.is_visible("#snapsave"),
+              "Send sends the photo and the optional one-line note, then the estimate comes back for review")
         await page.click("button[data-act=snapadd]"); await page.wait_for_timeout(300)
         check(not await page.is_visible(".sheet") and not await page.is_visible(".campic"), "Adding closes the camera sheet")
         await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)

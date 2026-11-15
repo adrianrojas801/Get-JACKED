@@ -7,7 +7,7 @@ $('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)
 const app=$('#app');
 app.addEventListener('input',e=>{
   const el=e.target,ds=el.dataset;
-  if(el.id==='snaptxt'){S.snapTxt=el.value;return}
+  if(el.id==='snaptxt'||el.id==='camnote'){S.snapTxt=el.value;return}
   if(el.id==='fsearch'){const q=el.value.trim().toLowerCase();app.querySelectorAll('.sheet .fgroup').forEach(g=>{let any=false;g.querySelectorAll('.chips button').forEach(b=>{const on=!q||b.textContent.toLowerCase().includes(q);b.hidden=!on;any=any||on});g.hidden=!any});return}
   if(el.id&&el.id.startsWith('in_')){S.draft=Object.assign({},S.draft,{[el.id]:el.value});return}
   if(el.id==='reqplan'){S.reqDraft=el.value;return}
@@ -29,7 +29,7 @@ app.addEventListener('input',e=>{
 app.addEventListener('change',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='photofile'){const f=el.files&&el.files[0];if(f)addPhoto(f,POSES.some(p=>p[0]===S.pose)?S.pose:'front');return}
-  if(el.id==='camfile'||el.id==='camretake'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snapTxt='';S.snap=null;S.sheet='cam';render()}return}
+  if(el.id==='camfile'||el.id==='camretake'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}if(el.id==='camfile')S.snapTxt='';S.snap=null;S.sheet='cam';render()}return}
   if(el.id==='snapfile'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snap=null;render()}return}
   if(ds.push){pushHour(ds.push,+el.value);return}
   if(el.id==='acboard'){setSharing(el.checked);return}
