@@ -167,7 +167,7 @@ function viewPlan(){
     <li>Six corn tortillas is about 350 cal. Six flour tortillas is about 850. Corn helps you stay lean.</li>
     <li>Jamba is mostly sugar unless you add the protein boost.</li>
     <li>Pozole, ceviche, chicken and beef are great. Rice and beans are your bulking carbs.</li>`:genericFood()}</ul>
-    <p class="muted">To change your quick-add foods, tap <b>All foods</b> on Today, then <b>Edit</b>.</p>
+    <p class="muted">To change your quick-add foods, tap <b>Add foods</b> on Today, then <b>Edit</b>.</p>
     <h3>Where the rules come from</h3><ul class="plain src">${SOURCES.map(([what,who,url])=>`<li>${what} <a href="${url}" target="_blank" rel="noopener">${who}</a></li>`).join('')}</ul>
     <p class="muted" style="margin-bottom:0">The 10% back-off after a stall, the ±150 calorie steps and the 6–8 week mini-cut are common coaching practice, not tested rules.</p></details>`;
   return h;
@@ -187,6 +187,7 @@ function render(){
   if(S.tab!=='today')S.sheet=null;
   const keep=S.sheet&&$('.sheet')?$('.sheet').scrollTop:0;
   if(S.sheet==='foods')h+=foodSheet();
+  if(S.sheet==='cam')h+=camSheet();
   document.body.classList.toggle('sheeton',!!S.sheet);
   $('#app').innerHTML=h;
   if(keep){const sh=$('.sheet');if(sh){sh.style.animation='none';sh.scrollTop=keep}}
