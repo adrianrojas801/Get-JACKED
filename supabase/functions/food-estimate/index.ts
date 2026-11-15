@@ -7,7 +7,7 @@
 // The key never leaves this function. Supabase checks the caller's sign-in before this code runs (verify_jwt).
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const MODEL = Deno.env.get("FOOD_MODEL") ?? "claude-haiku-5-5";
+const MODEL = Deno.env.get("FOOD_MODEL") ?? "claude-sonnet-5-5";
 const DAILY_LIMIT = Number(Deno.env.get("FOOD_DAILY_LIMIT") ?? "20");
 const MAX_IMAGE_CHARS = 2_800_000; // about 2 MB of JPEG as base64
 
@@ -21,7 +21,10 @@ const json = (body: unknown, status = 200) =>
 const RULES = `You estimate nutrition for a personal food log.
 Rules:
 - List each distinct food or drink as its own item.
-- For chain restaurant orders, use the chain's published nutrition numbers. For build-your-own places (Cava, Sweetgreen, Chipotle), add up the published numbers for each listed component and return the bowl as one item. Only mention uncertainty when a portion or ingredient isn't visible or listed.
+- For any named menu item or packaged product from a restaurant or company (a chain, a brand, a receipt or order screen line), use that company's published nutrition numbers for that exact item and size. Do not guess higher or lower than the published figure. If you don't know the published number, estimate from the closest published item and say so in the note.
+- For build-your-own places (Cava, Sweetgreen, Chipotle), add up the published numbers for each listed component and return the bowl as one item. Only mention uncertainty when a portion or ingredient isn't visible or listed.
+- Sides and extras that come with an entree are part of the order: list them as their own items with their published numbers.
+- If the note says something was shared or split (for example "shared between 4 of us"), return only the person's own share: divide that item's c and p by the number of people, and say so in the note. Never log a whole shared plate as one person's food. If they didn't say how it was split, assume an even split.
 - For a nutrition label, use the per-serving numbers; assume 1 serving unless the note says otherwise.
 - For home food, estimate typical portions from what's visible. Count tortillas individually.
 - c is calories for ONE unit, p is protein grams for ONE unit, q is how many units.
