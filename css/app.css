@@ -157,7 +157,8 @@ nav button{text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;font-w
 label.btn{display:inline-flex;align-items:center;font-size:14px}
 label.btn .ico{width:20px;height:20px;stroke-width:1.9;margin-right:7px;vertical-align:0}
 label.camb{padding:4px 10px}label.camb .ico{margin-right:0}
-.campic{display:block;width:100%;max-height:55vh;object-fit:contain;border-radius:var(--r-sm);border:1px solid var(--line)}
+.campic{display:block;width:100%;max-height:36vh;object-fit:contain;border-radius:var(--r-sm);border:1px solid var(--line)}
+.campic.thumb{width:auto;max-width:100%;max-height:72px;margin:0 auto}
 :root{--body:#e3eae5;--mus:#cdd7d0;--hot:#e0483c;--hot2:#ec8a80;--hot1:#f4c6c0}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--body:#1d2822;--mus:#2e3c35;--hot:#ff5f52;--hot2:#c4554c;--hot1:#6a3934}}
 :root[data-theme="dark"]{--body:#1d2822;--mus:#2e3c35;--hot:#ff5f52;--hot2:#c4554c;--hot1:#6a3934}
