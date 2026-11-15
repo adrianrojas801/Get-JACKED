@@ -170,13 +170,13 @@ async function start(){
   STARTED=true;
   document.body.classList.remove('signedout');$('#auth').innerHTML='';
   ME.user=user;LS.set('gj_last',{id:user.id,email:user.email});
-  S.sample=null;S.boot=false;
+  S.sample=null;S.estBusy=false;S.boot=false;
   const db=makeDb(ME.user.id);S.db=db;
   if(openCopy())setStatus(navigator.onLine===false?'Offline':'Syncing…');
   render();
   SB.from('profiles').select('display_name,is_admin').eq('id',ME.user.id).maybeSingle().then(({data})=>{if(data){ME.profile=data;keepCopy();meBadge()}},()=>{});
   const timer=setTimeout(()=>{if(!S.loaded){S.timedOut=true;S.note='Still connecting, so some saved data may be missing. Check your connection; it will fill in once it connects.';setStatus('Connecting…');render()}},10000);
-  const got=k=>{S.ready[k]=true;keepCopy();if(!S.synced&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.synced=S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;if(!Object.keys(pending).length)setStatus('Saved ✓');keepCopy();render();checkPlan();queueBoard();ensureFocus();return true}return false};
+  const got=k=>{S.ready[k]=true;keepCopy();if(!S.synced&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.synced=S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;if(!Object.keys(pending).length)setStatus('Saved ✓');keepCopy();render();checkPlan();queueBoard();ensureFocus();probeEstimates();return true}return false};
   db.collection('days').onSnapshot(s=>{const ch=applySnap(s,'days',S.days);if(!got('days')&&ch)softRender()},onErr);
   db.collection('workouts').onSnapshot(s=>{const ch=applySnap(s,'workouts',S.workouts);if(!got('workouts')&&ch)softRender()},onErr);
   db.doc('settings/main').onSnapshot(s=>{if(s.exists)S.known['settings/main']=true;let ch=false;if(!pending['settings/main']){const v=s.exists?s.data():{};if(JSON.stringify(v)!==JSON.stringify(S.settings)){S.settings=clone(v);ch=true}}if(!got('settings')&&ch)softRender()},onErr);

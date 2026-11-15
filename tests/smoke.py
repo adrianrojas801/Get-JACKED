@@ -104,6 +104,7 @@ async def main():
         await page.click("button[data-act=quick]")
         await page.click("button[data-act=foods]"); await page.wait_for_timeout(400)
         check("snap or describe" not in (await page.inner_text(".sheet")).lower(), "Photo estimates stay hidden until they're set up")
+        check(await page.locator("#camfile").count() == 0, "The camera button stays hidden until they're set up")
         await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
         await page.fill("input[data-day=weight]", "170.2"); await page.wait_for_timeout(1500)
         docs = await page.evaluate("JSON.stringify(window.__docs)")
@@ -282,8 +283,24 @@ async def main():
         await page.click("button[data-act=snapadd]"); await page.wait_for_timeout(300)
         check(any(f["n"] == "Test taco" and f["q"] == 3 for f in (await page.evaluate(f"window.__docs['days/{ago(0)}']"))["food"]),
               "Adding the estimate logs it")
+        # The camera button on the Food card: photo only, confirm, send, review, add.
+        await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
+        check(await page.locator("#camfile").count() == 1 and "add foods" in (await page.inner_text("#app")).lower(),
+              "The Food card shows a camera button and Add foods once estimates are ready")
+        cam_png = __import__("base64").b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+        await page.evaluate("window.__lastEstimate = null")
+        await page.set_input_files("#camfile", {"name": "plate.png", "mimeType": "image/png", "buffer": cam_png}); await page.wait_for_timeout(300)
+        check(await page.is_visible(".campic") and await page.is_visible("button[data-act=snap]") and not await page.evaluate("window.__lastEstimate"),
+              "Taking a photo shows it with Send and Retake, and nothing is sent yet")
+        await page.click("button[data-act=snap]"); await page.wait_for_timeout(600)
+        sent = await page.evaluate("window.__lastEstimate")
+        check(sent and sent["note"] == "" and sent.get("image") and await page.is_visible("input[data-sn='0'][data-sf=n]") and not await page.is_visible("#snapsave"),
+              "Send sends only the photo, then the estimate comes back for review")
+        await page.click("button[data-act=snapadd]"); await page.wait_for_timeout(300)
+        check(not await page.is_visible(".sheet") and not await page.is_visible(".campic"), "Adding closes the camera sheet")
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
         sheet = (await page.inner_text(".sheet")).lower()
-        check("all foods" in sheet and "recent" in sheet and "greek yogurt" in sheet, "All foods opens the full list as a sheet")
+        check("add foods" in sheet and "recent" in sheet and "greek yogurt" in sheet, "Add foods opens the full list as a sheet")
         await page.fill("#fsearch", "greek"); await page.wait_for_timeout(150)
         check(await page.locator(".sheet .chips button:visible").count() == 1, "Search narrows the list")
         await page.fill("#cn", "Test bar"); await page.fill("#cc", "200"); await page.fill("#cp", "20")

@@ -29,6 +29,7 @@ app.addEventListener('input',e=>{
 app.addEventListener('change',e=>{
   const el=e.target,ds=el.dataset;
   if(el.id==='photofile'){const f=el.files&&el.files[0];if(f)addPhoto(f,POSES.some(p=>p[0]===S.pose)?S.pose:'front');return}
+  if(el.id==='camfile'||el.id==='camretake'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snapTxt='';S.snap=null;S.sheet='cam';render()}return}
   if(el.id==='snapfile'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snap=null;render()}return}
   if(ds.push){pushHour(ds.push,+el.value);return}
   if(el.id==='acboard'){setSharing(el.checked);return}
@@ -80,12 +81,12 @@ app.addEventListener('click',e=>{
   else if(act==='snap'){if(!(S.snap&&S.snap.busy))runSnap()}
   else if(act==='snapclear'){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapUrl=null;S.snapFile=null;render()}
   else if(act==='snapdel'){if(S.snap&&S.snap.items){S.snap.items.splice(i,1);render()}}
-  else if(act==='snapcancel'){clearSnap();render()}
+  else if(act==='snapcancel'||act==='camx'){clearSnap();if(S.sheet==='cam')S.sheet=null;render()}
   else if(act==='snapadd'){const items=(S.snap&&S.snap.items||[]).filter(x=>String(x.n).trim());if(!items.length)return;
     const d=dayDoc(S.dk);for(const x of items)addFood(d,x,Math.max(1,Math.round(+x.q||1)));
     putDay(S.dk,d);
     const sv=$('#snapsave');if(sv&&sv.checked){const st=clone(cfg());const ps=clone(presets());for(const x of items){const n=String(x.n).trim();if(!ps.some(y=>y.n===n))ps.push({g:'Snapped',n,c:+x.c||0,p:+x.p||0})}st.presets=ps;putSettings(st)}
-    clearSnap();render()}
+    clearSnap();if(S.sheet==='cam')S.sheet=null;render()}
   else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=addFood(dayDoc(S.dk),{n,c,p});putDay(S.dk,d);render()}
   else if(act==='setdone'){const w=curWorkout(),ex=w.ex[i],s=ex.sets[+ds.j];
     if(!s.d){const df=setDefault(w,i,+ds.j);if(s.w==='')s.w=df.w;if(s.r==='')s.r=df.r;

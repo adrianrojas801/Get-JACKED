@@ -68,7 +68,7 @@ function bodyCard(k,d){
 const firstSteps=()=>[
   ['Log a workout',Object.values(S.workouts).some(trained),'Tap Open workout and log your sets.'],
   ['Weigh in',Object.values(S.days).some(d=>d&&num(d.weight)),'In the morning, before you eat. It goes under Body.'],
-  ['Log a day of food',Object.values(S.days).some(d=>d&&(d.food||[]).length),'Tap a food under Food, or All foods for the full list.'],
+  ['Log a day of food',Object.values(S.days).some(d=>d&&(d.food||[]).length),'Tap a food under Food, or Add foods for the full list.'],
   ['Take your starting measurements',measDays().length>0,'Under Body, tap Sleep, cardio, measurements.']];
 function firstStepsCard(){
   if(cfg().welcomed)return '';
@@ -90,7 +90,7 @@ function viewToday(){
    h+=`<div class="card"><div class="row between"><h2 style="margin:0">${esc(titleOf(prog))}</h2>${prog==='rest'?'<span class="muted">Walk / 8–10k steps</span>':`<button class="small primary" data-act="startw">${trainedDates().has(k)?'Open workout ✓':'Open workout'}</button>`}</div>
     ${weekStrip(k)}<div class="muted">${wk.workouts}/${plan||'–'} workouts this week${sk.weeks>1?` · ${sk.weeks} weeks in a row on plan`:''}${sk.pro>1?` · protein hit ${sk.pro} days in a row`:''}</div>${isToday?buddyLine():''}</div>`}
   const yd=S.days[addDays(k,-1)],yt=yd&&(yd.food||[]).length?foodTotals(yd):null;
-  h+=`<div class="card"><div class="row between"><h2 style="margin:0">Food</h2><button class="small primary" data-act="foods">All foods</button></div>
+  h+=`<div class="card"><div class="row between"><h2 style="margin:0">Food</h2><div class="row">${camButton()}<button class="small primary" data-act="foods">Add foods</button></div></div>
     <div style="margin-top:8px">${foodSum(d,t)}</div>
     <div class="chips" style="margin-top:8px">${topFoods(k).map((p,i)=>chip('quick',i,p,d)).join('')}</div>
     ${yt&&!(d.food||[]).length?`<button class="small" data-act="copyday" style="margin-top:12px">Log the same as yesterday (${fmt(yt.c)} cal · ${fmt(yt.p)} g)</button>`:''}${foodLog(d)}</div>`;
@@ -102,7 +102,7 @@ function foodSheet(){
   const k=S.dk,d=dayDoc(k),ps=presets(),groups={};
   foodGroups().forEach(g=>{groups[g]=[]});ps.forEach((p,i)=>{(groups[p.g||'Other']=groups[p.g||'Other']||[]).push([p,i])});
   const allGroups=Object.keys(groups),rc=recentFoods(k);
-  let h=`<div class="sheet" role="dialog" aria-label="All foods"><div class="sheethead"><h2>${S.qedit?'Edit foods':'All foods'}</h2><div class="row"><button class="small" data-act="qedit">${S.qedit?'Back to list':'Edit'}</button><button class="small primary" data-act="sheetx">Done</button></div></div>`;
+  let h=`<div class="sheet" role="dialog" aria-label="Add foods"><div class="sheethead"><h2>${S.qedit?'Edit foods':'Add foods'}</h2><div class="row"><button class="small" data-act="qedit">${S.qedit?'Back to list':'Edit'}</button><button class="small primary" data-act="sheetx">Done</button></div></div>`;
   if(S.qedit){
     h+=`<div class="muted">Change the numbers so they match what you actually eat. Changes save automatically.</div>`;
     for(const g of allGroups){const arr=groups[g];if(!arr.length)continue;h+=`<h3>${esc(g)}</h3><ul class="list qlist">`+arr.map(([p,i],j)=>`<li style="flex-wrap:wrap"><input data-pre="${i}" data-pf="n" value="${esc(p.n)}" style="flex:1 1 100%" aria-label="Name"><input data-pre="${i}" data-pf="c" type="number" inputmode="numeric" value="${p.c}" style="width:76px" aria-label="Calories"><span class="muted">cal</span><input data-pre="${i}" data-pf="p" type="number" inputmode="decimal" value="${p.p}" style="width:64px" aria-label="Protein"><span class="muted">g</span><select data-pre="${i}" data-pf="g" class="grow" aria-label="Group">${allGroups.map(x=>`<option ${x===(p.g||'Other')?'selected':''}>${esc(x)}</option>`).join('')}</select><button class="small" data-act="qmove" data-i="${i}" data-v="-1" ${j===0?'disabled':''} aria-label="Move up">↑</button><button class="small" data-act="qmove" data-i="${i}" data-v="1" ${j===arr.length-1?'disabled':''} aria-label="Move down">↓</button><button class="small qx" data-act="qdel" data-i="${i}" aria-label="Delete">✕</button></li>`).join('')+`</ul>`}
@@ -117,13 +117,9 @@ function foodSheet(){
   return h;
 }
 
-function snapUI(){
-  if(!S.sample||S.sampleOff)return '';
-  const sn=S.snap||{};
-  let h=`<h3>Snap or describe</h3><div class="muted">${S.imgOK?'A photo of your plate, receipt, order screen or nutrition label, and/or a quick description. You review it before it’s added.':'Describe what you ate. You review it before it’s added.'}</div>`;
-  if(S.imgOK)h+=`<div class="row" style="margin-top:8px"><label class="btn" for="snapfile"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>${S.snapFile?'Change photo':'Add photo'}</label><input type="file" id="snapfile" accept="image/*" hidden>${S.snapUrl?`<img class="snapimg" src="${S.snapUrl}" alt="food photo"><button class="small" data-act="snapclear">✕</button>`:''}</div>`;
-  h+=`<textarea id="snaptxt" style="margin-top:8px" placeholder="e.g. Cava bowl, double chicken, brown rice, hummus · or: 2 plates, 6 corn tortillas">${esc(S.snapTxt||'')}</textarea>
-   <button class="primary" data-act="snap" style="width:100%;margin-top:6px" ${sn.busy?'disabled':''}>${sn.busy?'Estimating… (can take ~30 sec)':'Estimate'}</button>`;
+// The estimate and its review rows, shared by the Add foods sheet and the camera sheet.
+function snapResult(sn,save){
+  let h='';
   if(sn.err)h+=`<div class="warn" style="margin-top:6px">${esc(sn.err)}</div>`;
   if(sn.items){
     if(!sn.items.length)h+=`<div class="muted" style="margin-top:6px">${esc(sn.note||'Nothing to add.')}</div>`;
@@ -131,10 +127,32 @@ function snapUI(){
       h+=`<div class="banner" style="margin-top:8px"><div class="snaprow muted" style="margin-top:0"><span>Food</span><span>cal</span><span>prot g</span><span>qty</span><span></span></div>`+
       sn.items.map((x,i)=>`<div class="snaprow"><input data-sn="${i}" data-sf="n" value="${esc(x.n)}"><input data-sn="${i}" data-sf="c" type="number" inputmode="numeric" value="${x.c}"><input data-sn="${i}" data-sf="p" type="number" inputmode="decimal" value="${x.p}"><input data-sn="${i}" data-sf="q" type="number" inputmode="numeric" value="${x.q}"><button class="small" data-act="snapdel" data-i="${i}">✕</button></div>`).join('')+
       `<div class="muted" style="margin-top:6px">Total ≈ ${fmt(tc)} cal · ${fmt(tp)} g protein${sn.note?' · '+esc(sn.note):''}</div>
-      <label class="check" style="margin-top:8px;font-size:14px"><input type="checkbox" id="snapsave"> Also save these as quick-add buttons</label>
+      ${save?`<label class="check" style="margin-top:8px;font-size:14px"><input type="checkbox" id="snapsave"> Also save these as quick-add buttons</label>`:''}
       <div class="row" style="margin-top:8px"><button class="primary" data-act="snapadd">Add to log</button><button data-act="snapcancel">Discard</button></div></div>`}
   }
   return h;
+}
+// The camera button on the Food card: opens the phone's camera, then the sheet below asks to send the photo.
+// Hidden until the function says it's ready (same rule as Snap or describe).
+function camButton(){
+  if(!S.sample||!S.imgOK||S.sampleOff)return '';
+  return `<label class="btn camb" for="camfile" aria-label="Snap a photo of your food"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></label><input type="file" id="camfile" accept="image/*" capture="environment" hidden>`;
+}
+function camSheet(){
+  const sn=S.snap||{};
+  let h=`<div class="sheet" role="dialog" aria-label="Food photo"><div class="sheethead"><h2>Food photo</h2><div class="row"><button class="small" data-act="camx">Cancel</button></div></div>`;
+  if(S.snapUrl)h+=`<img class="campic" src="${S.snapUrl}" alt="Your food photo">`;
+  if(!sn.items)h+=`<div class="row" style="margin-top:10px"><button class="primary grow" data-act="snap" ${sn.busy?'disabled':''}>${sn.busy?'Estimating… (can take ~30 sec)':'Send'}</button>${sn.busy?'':'<label class="btn" for="camretake">Retake</label><input type="file" id="camretake" accept="image/*" capture="environment" hidden>'}</div>`;
+  return h+snapResult(sn,false)+`</div>`;
+}
+function snapUI(){
+  if(!S.sample||S.sampleOff)return '';
+  const sn=S.snap||{};
+  let h=`<h3>Snap or describe</h3><div class="muted">${S.imgOK?'A photo of your plate, receipt, order screen or nutrition label, and/or a quick description. You review it before it’s added.':'Describe what you ate. You review it before it’s added.'}</div>`;
+  if(S.imgOK)h+=`<div class="row" style="margin-top:8px"><label class="btn" for="snapfile"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>${S.snapFile?'Change photo':'Add photo'}</label><input type="file" id="snapfile" accept="image/*" hidden>${S.snapUrl?`<img class="snapimg" src="${S.snapUrl}" alt="food photo"><button class="small" data-act="snapclear">✕</button>`:''}</div>`;
+  h+=`<textarea id="snaptxt" style="margin-top:8px" placeholder="e.g. Cava bowl, double chicken, brown rice, hummus · or: 2 plates, 6 corn tortillas">${esc(S.snapTxt||'')}</textarea>
+   <button class="primary" data-act="snap" style="width:100%;margin-top:6px" ${sn.busy?'disabled':''}>${sn.busy?'Estimating… (can take ~30 sec)':'Estimate'}</button>`;
+  return h+snapResult(sn,true);
 }
 // ---------- photo food estimates (off until the food-estimate function has its key; README, "Optional features") ----------
 // Who is eating, so portions are judged for the right person. The estimating rules themselves live in the Edge Function.
@@ -152,10 +170,11 @@ const edgeSampler=()=>({async estimate({note,who,image}){
   if(!data||data.error)throw {code:(data&&data.error)||'failed'};
   return data;
 }});
-// Asked once per visit, when the food sheet first opens: the feature only shows up if the function says it's ready.
+// Asked when Today loads and each time Add foods opens, until the function says it's ready: the feature only shows up then.
 async function probeEstimates(){
-  if(S.estProbe||!SB||!SB.functions)return;S.estProbe=true;
-  try{const {data,error}=await SB.functions.invoke('food-estimate',{body:{ping:true}});if(!error&&data&&data.ready){S.sample=edgeSampler();S.imgOK=true;if(S.sheet)softRender()}}catch(e){}
+  if(S.sample||S.estBusy||!SB||!SB.functions)return;S.estBusy=true;
+  try{const {data,error}=await SB.functions.invoke('food-estimate',{body:{ping:true}});if(!error&&data&&data.ready){S.sample=edgeSampler();S.imgOK=true;softRender()}}catch(e){}
+  S.estBusy=false;
 }
 async function runSnap(){
   const txt=(S.snapTxt||'').trim();

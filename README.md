@@ -55,7 +55,7 @@ Two features need a server piece that only you can set up. Everything else is al
 1. Make an API key at console.anthropic.com and set a monthly spending limit there.
 2. In Supabase, go to **Edge Functions → Secrets** and add `ANTHROPIC_API_KEY` with that key.
 3. Do "Deploying the server functions" above if you haven't.
-4. Open the app, tap **All foods**, and **Snap or describe** is there.
+4. Open the app, tap the camera button next to **Add foods**, or open **Add foods** for **Snap or describe**.
 
 Each person gets 20 estimates a day. To change that, add a secret named `FOOD_DAILY_LIMIT`. To use a different model, add `FOOD_MODEL`.
 
