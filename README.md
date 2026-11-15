@@ -147,7 +147,7 @@ Both stay hidden in the app until they're set up. Neither needs a code change.
 3. Deploy the functions (above) if you haven't.
 4. Fully close and reopen the app. On Today, a **camera button** appears next to **Add foods**. Tap it, take a photo, add an optional one-line note (up to 60 characters), tap **Send**, check the estimate, and tap **Add to log**. **Add foods** also has **Snap or describe**, which takes a photo and/or a longer description.
 
-Each person gets 20 estimates a day. Change that with a `FOOD_DAILY_LIMIT` secret, or pick another model with `FOOD_MODEL` (the default is `claude-sonnet-5-5`; `claude-haiku-5-5` is cheaper but less accurate on named menu items). The function lets the model search the web for a company's published nutrition numbers (up to 3 searches per estimate, billed by Anthropic per search). Add a `FOOD_SEARCH` secret set to `off` to stop that. If it fails, check Supabase → Edge Functions → `food-estimate` → **Logs**.
+Each person gets 20 estimates a day. Change that with a `FOOD_DAILY_LIMIT` secret, or pick another model with `FOOD_MODEL` (the default is `claude-sonnet-5-5`; `claude-haiku-5-5` is cheaper but less accurate on named menu items). The function lets the model search the web for a company's published nutrition numbers (up to 5 searches per estimate, billed by Anthropic per search). Add a `FOOD_SEARCH` secret set to `off` to stop that. If it fails, check Supabase → Edge Functions → `food-estimate` → **Logs**.
 
 ### Reminders
 

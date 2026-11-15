@@ -10,7 +10,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const MODEL = Deno.env.get("FOOD_MODEL") ?? "claude-sonnet-5-5";
 // Lets the model look up a company's published nutrition numbers instead of recalling them. Set FOOD_SEARCH to "off" to disable.
 const SEARCH = (Deno.env.get("FOOD_SEARCH") ?? "on") !== "off";
-const MAX_SEARCHES = 3;
+const MAX_SEARCHES = 5;
 const DAILY_LIMIT = Number(Deno.env.get("FOOD_DAILY_LIMIT") ?? "20");
 const MAX_IMAGE_CHARS = 2_800_000; // about 2 MB of JPEG as base64
 
@@ -24,7 +24,7 @@ const json = (body: unknown, status = 200) =>
 const RULES = `You estimate nutrition for a personal food log.
 Rules:
 - List each distinct food or drink as its own item.
-- For any named menu item or packaged product from a restaurant or company (a chain, a brand, a receipt or order screen line), use that company's published nutrition numbers for that exact item and size. Do not guess higher or lower than the published figure. If you have a web search tool, search for the company's current nutrition guide and use the numbers you find for each named item (one search per restaurant is usually enough), rather than relying on memory. If the menu lists an item by count (4, 5 or 6 pieces) and the person had a different number, use the per-piece figure. For fountain drinks, use the restaurant's regular cup unless a size is given. If you can't find the published number, estimate from the closest published item and say which one in the note.
+- For any named menu item or packaged product from a restaurant or company (a chain, a brand, a receipt or order screen line), use that company's published nutrition numbers for that exact item and size. Do not guess higher or lower than the published figure. If you have a web search tool, search for the company's current nutrition guide and use the numbers you find for each named item rather than relying on memory. Look up every named item, including sides, sauces and drinks, not only the main dishes: if the first results don't list an item, search again for that item by name before falling back to an estimate. If the menu lists an item by count (4, 5 or 6 pieces) and the person had a different number, use the per-piece figure. For fountain drinks, use the restaurant's regular cup unless a size is given. If you can't find the published number, estimate from the closest published item and say which one in the note.
 - For build-your-own places (Cava, Sweetgreen, Chipotle), add up the published numbers for each listed component and return the bowl as one item. Only mention uncertainty when a portion or ingredient isn't visible or listed.
 - Sides and extras that come with an entree are part of the order: list them as their own items with their published numbers.
 - If the note says something was shared or split (for example "shared between 4 of us"), return only the person's own share: divide that item's c and p by the number of people, and say so in the note. Never log a whole shared plate as one person's food. If they didn't say how it was split, assume an even split.
