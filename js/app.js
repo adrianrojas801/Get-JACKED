@@ -62,14 +62,16 @@ function stepsCard(){
   let h=`<div class="card"><h2>Automatic steps</h2>`;
   if(S.stepTok)h+=`<p class="muted" style="margin-top:0">Set this up once on your iPhone. The token below is only shown now, so finish before you leave this page.</p>
     <ol class="plain" style="padding-left:20px">
-     <li>Open the <b>Shortcuts</b> app, tap <b>+</b> and name the shortcut “Send steps”.</li>
-     <li>Add <b>Find Health Samples</b>. Set the type to <b>Steps</b> and add the filter <b>Start Date is today</b>.</li>
+     <li>Open the <b>Shortcuts</b> app, tap <b>+</b> and name it “Send steps”.</li>
+     <li>Add <b>Find Health Samples</b>. Set the type to <b>Steps</b> and add the filter <b>Start Date is today</b>. Allow Health access if asked.</li>
      <li>Add <b>Calculate Statistics</b> and choose <b>Sum</b>.</li>
-     <li>Add <b>Format Date</b> for the <b>Current Date</b>. Set Date Format to <b>Custom</b> and type <code>yyyy-MM-dd</code>.</li>
-     <li>Add <b>Get Contents of URL</b>. Paste the URL below, set Method to <b>POST</b>, add a header named <code>apikey</code> with the key below, and set Request Body to <b>JSON</b> with three fields:
-       <code>p_token</code> (Text, the token below), <code>p_steps</code> (Number, the Statistics result) and <code>p_date</code> (Text, the Formatted Date).</li>
-     <li>Tap ▶ to test it. Your steps show up on Today within a few seconds.</li>
-     <li>In the <b>Automation</b> tab, add a <b>Time of Day</b> automation (9:00 PM, daily, Run Immediately) that runs “Send steps”.</li>
+     <li>Add <b>Date</b> and leave it on <b>Current Date</b>.</li>
+     <li>Add <b>Format Date</b>. Set its input to that date, set Date Format to <b>Custom</b> and type <code>yyyy-MM-dd</code>.</li>
+     <li>Add <b>Get Contents of URL</b>. Paste the URL below and set Method to <b>POST</b>.</li>
+     <li>Under Headers, add <code>apikey</code> with the key below.</li>
+     <li>Set Request Body to <b>JSON</b> and add three fields: <code>p_token</code> (Text, the token below), <code>p_steps</code> (Number, the Statistics result) and <code>p_date</code> (Text, the Formatted Date).</li>
+     <li>Tap ▶. If it works, you see <b>ok</b> and your steps show up on Today within a few seconds.</li>
+     <li>Open the <b>Automation</b> tab and add <b>Time of Day</b> (9:00 PM, daily, <b>Run Immediately</b>) that runs “Send steps”.</li>
     </ol>${copyRow('URL',CFG.url+'/rest/v1/rpc/log_steps')}${copyRow('apikey header',CFG.key)}${copyRow('p_token',S.stepTok)}
     <div class="row" style="margin-top:10px"><button class="small" data-act="stepdone">Done</button></div>`;
   else if(S.stepLink)h+=`<p class="muted" style="margin-top:0">Automatic steps are on. ${S.stepLink.last_used?'Last received '+new Date(S.stepLink.last_used).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'.':'Nothing received yet.'}</p>
