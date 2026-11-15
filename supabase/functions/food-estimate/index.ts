@@ -8,6 +8,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const MODEL = Deno.env.get("FOOD_MODEL") ?? "claude-sonnet-5-5";
+// Lets the model look up a company's published nutrition numbers instead of recalling them. Set FOOD_SEARCH to "off" to disable.
+const SEARCH = (Deno.env.get("FOOD_SEARCH") ?? "on") !== "off";
+const MAX_SEARCHES = 3;
 const DAILY_LIMIT = Number(Deno.env.get("FOOD_DAILY_LIMIT") ?? "20");
 const MAX_IMAGE_CHARS = 2_800_000; // about 2 MB of JPEG as base64
 
@@ -21,14 +24,14 @@ const json = (body: unknown, status = 200) =>
 const RULES = `You estimate nutrition for a personal food log.
 Rules:
 - List each distinct food or drink as its own item.
-- For any named menu item or packaged product from a restaurant or company (a chain, a brand, a receipt or order screen line), use that company's published nutrition numbers for that exact item and size. Do not guess higher or lower than the published figure. If you don't know the published number, estimate from the closest published item and say so in the note.
+- For any named menu item or packaged product from a restaurant or company (a chain, a brand, a receipt or order screen line), use that company's published nutrition numbers for that exact item and size. Do not guess higher or lower than the published figure. If you have a web search tool, search for the company's current nutrition guide and use the numbers you find for each named item (one search per restaurant is usually enough), rather than relying on memory. If the menu lists an item by count (4, 5 or 6 pieces) and the person had a different number, use the per-piece figure. For fountain drinks, use the restaurant's regular cup unless a size is given. If you can't find the published number, estimate from the closest published item and say which one in the note.
 - For build-your-own places (Cava, Sweetgreen, Chipotle), add up the published numbers for each listed component and return the bowl as one item. Only mention uncertainty when a portion or ingredient isn't visible or listed.
 - Sides and extras that come with an entree are part of the order: list them as their own items with their published numbers.
 - If the note says something was shared or split (for example "shared between 4 of us"), return only the person's own share: divide that item's c and p by the number of people, and say so in the note. Never log a whole shared plate as one person's food. If they didn't say how it was split, assume an even split.
 - For a nutrition label, use the per-serving numbers; assume 1 serving unless the note says otherwise.
 - For home food, estimate typical portions from what's visible. Count tortillas individually.
 - c is calories for ONE unit, p is protein grams for ONE unit, q is how many units.
-- Reply with only JSON in this shape: {"items":[{"n":"short name","c":60,"p":1.5,"q":6}],"note":"one short sentence, only if something was assumed"}
+- Your final message must be only JSON, with no other text before or after it, in this shape: {"items":[{"n":"short name","c":60,"p":1.5,"q":6}],"note":"one short sentence, only if something was assumed"}
 - If there is no food or nutrition info, reply {"items":[],"note":"short reason"}.`;
 
 Deno.serve(async (req) => {
@@ -63,19 +66,48 @@ Deno.serve(async (req) => {
     text: `${RULES}\n\nAbout the person: ${who || "(not given)"}\n${image ? "The image shows their food, a receipt, an order screen, or a nutrition label." : "There is no image; use only the note."}\nTheir note: "${note.replace(/"/g, "'") || "(none)"}"`,
   });
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 2500, messages: [{ role: "user", content }] }),
-  });
+  const call = (messages: unknown[], search: boolean) =>
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 2500,
+        messages,
+        ...(search ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: MAX_SEARCHES }] } : {}),
+      }),
+    });
+
+  const messages: unknown[] = [{ role: "user", content }];
+  let search = SEARCH;
+  let res = await call(messages, search);
+  if (!res.ok && search && res.status === 400) {
+    // Web search can be turned off for the organization, or not supported by the chosen model. Fall back to no search.
+    console.error("anthropic search off", (await res.text()).slice(0, 300));
+    search = false;
+    res = await call(messages, search);
+  }
   if (!res.ok) {
     console.error("anthropic", res.status, (await res.text()).slice(0, 300));
     return json({ error: res.status === 429 ? "rate_limited" : "upstream" }, 502);
   }
-  const out = await res.json();
+  let out = await res.json();
+  // A long search turn can pause. Send the partial answer back unchanged to let it finish.
+  for (let i = 0; i < 2 && out?.stop_reason === "pause_turn"; i++) {
+    messages.push({ role: "assistant", content: out.content });
+    res = await call(messages, search);
+    if (!res.ok) {
+      console.error("anthropic", res.status, (await res.text()).slice(0, 300));
+      return json({ error: res.status === 429 ? "rate_limited" : "upstream" }, 502);
+    }
+    out = await res.json();
+  }
   const text: string = (out?.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("");
   const cleaned = text.replace(/```(?:json)?/gi, "");
-  const a = cleaned.indexOf("{"), z = cleaned.lastIndexOf("}");
+  // With search on, the answer can follow some working text, so start at the last {"items" if there is one.
+  const starts = [...cleaned.matchAll(/\{\s*"items"/g)];
+  const a = starts.length ? starts[starts.length - 1].index! : cleaned.indexOf("{");
+  const z = cleaned.lastIndexOf("}");
   try {
     if (a < 0 || z < a) throw new Error("no json");
     const parsed = JSON.parse(cleaned.slice(a, z + 1));
