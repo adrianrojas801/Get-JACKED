@@ -86,8 +86,8 @@ app.addEventListener('click',e=>{
     const d=dayDoc(S.dk);for(const x of items)addFood(d,x,Math.max(1,Math.round(+x.q||1)));
     putDay(S.dk,d);
     const sv=$('#snapsave');if(sv&&sv.checked){const st=clone(cfg());const ps=clone(presets());for(const x of items){const n=String(x.n).trim();if(!ps.some(y=>y.n===n))ps.push({g:'Snapped',n,c:+x.c||0,p:+x.p||0})}st.presets=ps;putSettings(st)}
-    clearSnap();if(S.sheet==='cam')S.sheet=null;render()}
-  else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=addFood(dayDoc(S.dk),{n,c,p});putDay(S.dk,d);render()}
+    clearSnap();S.sheet=null;S.qedit=false;render()}
+  else if(act==='custom'){const n=$('#cn').value.trim(),c=num($('#cc').value),p=num($('#cp').value);if(!n||(c==null&&p==null))return;const d=addFood(dayDoc(S.dk),{n,c,p});putDay(S.dk,d);S.sheet=null;S.qedit=false;render()}
   else if(act==='setdone'){const w=curWorkout(),ex=w.ex[i],s=ex.sets[+ds.j];
     if(!s.d){const df=setDefault(w,i,+ds.j);if(s.w==='')s.w=df.w;if(s.r==='')s.r=df.r;
       if(s.r===''){const inp=app.querySelector(`input[data-w="${i}"][data-s="${ds.j}"][data-f="r"]`);inp&&inp.focus();return}
@@ -152,6 +152,36 @@ app.addEventListener('click',e=>{
   else if(act==='copy'){const txt=JSON.stringify({settings:S.settings,days:S.days,workouts:S.workouts});S.copyText=null;
     Promise.resolve().then(()=>navigator.clipboard.writeText(txt)).then(()=>{S.copied=true;render();setTimeout(()=>{S.copied=false;render()},2500)}).catch(()=>{S.copyText=txt;render()})}
 });
+
+// ---------- swipe a sheet down to close it ----------
+// Same as Done or Cancel. Starts from the header, or from anywhere once the sheet is scrolled to the top. Never from a text field.
+function closeSheet(){if(S.sheet==='cam')clearSnap();S.sheet=null;S.qedit=false;render()}
+let SW=null;
+app.addEventListener('touchstart',e=>{
+  SW=null;const sh=e.target.closest('.sheet');
+  if(!sh||e.touches.length!==1||e.target.closest('input,textarea,select'))return;
+  const head=!!e.target.closest('.sheethead');
+  if(!head&&sh.scrollTop>0)return;
+  SW={sh,head,y:e.touches[0].clientY,dy:0,on:false,t:Date.now()};
+},{passive:true});
+app.addEventListener('touchmove',e=>{
+  if(!SW)return;
+  const dy=e.touches[0].clientY-SW.y;SW.dy=dy;
+  if(!SW.on){
+    if(dy<-8){SW=null;return}
+    if(dy>10&&(SW.head||SW.sh.scrollTop<=0))SW.on=true;else return;
+  }
+  e.preventDefault();
+  SW.sh.style.animation='none';SW.sh.style.transition='none';SW.sh.style.transform=`translateY(${Math.max(0,dy)}px)`;
+},{passive:false});
+function endSwipe(){
+  if(!SW)return;const s=SW;SW=null;if(!s.on)return;
+  const quick=Date.now()-s.t<300&&s.dy>50;
+  s.sh.style.transition='transform .18s ease-out';
+  if(s.dy>110||quick){s.sh.style.transform='translateY(100%)';setTimeout(closeSheet,170)}
+  else{s.sh.style.transform='translateY(0)';setTimeout(()=>{s.sh.style.transition=''},200)}
+}
+app.addEventListener('touchend',endSwipe);app.addEventListener('touchcancel',endSwipe);
 
 // ---------- drag to reorder ----------
 let DR=null;
