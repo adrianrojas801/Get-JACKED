@@ -283,8 +283,8 @@ async def main():
         await page.click("button[data-act=snapadd]"); await page.wait_for_timeout(300)
         check(any(f["n"] == "Test taco" and f["q"] == 3 for f in (await page.evaluate(f"window.__docs['days/{ago(0)}']"))["food"]),
               "Adding the estimate logs it")
+        check(await page.locator(".sheet").count() == 0, "Adding an estimate closes the Add foods sheet")
         # The camera button on the Food card: photo only, confirm, send, review, add.
-        await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
         check(await page.locator("#camfile").count() == 1 and "add foods" in (await page.inner_text("#app")).lower(),
               "The Food card shows a camera button and Add foods once estimates are ready")
         cam_png = __import__("base64").b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
@@ -305,11 +305,21 @@ async def main():
         check(await page.locator(".sheet .chips button:visible").count() == 1, "Search narrows the list")
         await page.fill("#cn", "Test bar"); await page.fill("#cc", "200"); await page.fill("#cp", "20")
         await page.click("button[data-act=custom]"); await page.wait_for_timeout(200)
+        check(await page.locator(".sheet").count() == 0 and "test bar" in (await page.inner_text("#flog")).lower(), "A custom Add logs the food and closes the sheet")
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
         await page.click("button[data-act=qedit]"); await page.wait_for_timeout(200)
         await page.fill("input[data-pre='0'][data-pf=c]", "222"); await page.wait_for_timeout(1000)
         check((await settings(page))["presets"][0]["c"] == 222, "Edit in the sheet changes a quick-add food's numbers")
         await page.click("button[data-act=sheetx]"); await page.wait_for_timeout(200)
-        check(await page.locator(".sheet").count() == 0 and "test bar" in (await page.inner_text("#flog")).lower(), "Done closes the sheet and the food is logged")
+        check(await page.locator(".sheet").count() == 0, "Done closes the sheet")
+        swipe = """([sel, dy]) => { const el = document.querySelector(sel); const mk = (type, y) => new TouchEvent(type, {bubbles: true, cancelable: true,
+            touches: type === 'touchend' ? [] : [new Touch({identifier: 1, target: el, clientX: 100, clientY: y})]});
+          el.dispatchEvent(mk('touchstart', 100)); el.dispatchEvent(mk('touchmove', 100 + dy / 2)); el.dispatchEvent(mk('touchmove', 100 + dy)); el.dispatchEvent(mk('touchend', 100 + dy)); }"""
+        await page.click("button[data-act=foods]"); await page.wait_for_timeout(300)
+        await page.evaluate(swipe, [".sheethead h2", 40]); await page.wait_for_timeout(400)
+        check(await page.locator(".sheet").count() == 1, "A short swipe down leaves the sheet open")
+        await page.evaluate(swipe, [".sheethead h2", 260]); await page.wait_for_timeout(500)
+        check(await page.locator(".sheet").count() == 0, "Swiping the sheet down closes it")
         await page.click("#flog li:has-text('Test bar') button[data-v='-1']"); await page.wait_for_timeout(200)
         check("test bar" not in (await page.inner_text("#flog")).lower() and "Removed Test bar" in await page.inner_text("#toast"),
               "Removing a food offers Undo")
