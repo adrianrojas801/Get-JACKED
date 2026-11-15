@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1000, messages: [{ role: "user", content }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 2500, messages: [{ role: "user", content }] }),
   });
   if (!res.ok) {
     console.error("anthropic", res.status, (await res.text()).slice(0, 300));
@@ -71,11 +71,15 @@ Deno.serve(async (req) => {
   }
   const out = await res.json();
   const text: string = (out?.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("");
-  const a = text.indexOf("{"), z = text.lastIndexOf("}");
+  const cleaned = text.replace(/```(?:json)?/gi, "");
+  const a = cleaned.indexOf("{"), z = cleaned.lastIndexOf("}");
   try {
-    const parsed = JSON.parse(text.slice(a, z + 1));
+    if (a < 0 || z < a) throw new Error("no json");
+    const parsed = JSON.parse(cleaned.slice(a, z + 1));
     return json({ items: Array.isArray(parsed.items) ? parsed.items : [], note: String(parsed.note ?? "") });
   } catch {
+    // Log what came back so a failed estimate can be diagnosed from the function logs.
+    console.error("invalid_json", out?.stop_reason, cleaned.slice(0, 600));
     return json({ error: "invalid_json" }, 502);
   }
 });
