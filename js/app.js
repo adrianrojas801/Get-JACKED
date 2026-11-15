@@ -71,7 +71,9 @@ function stepsCard(){
      <li>Under Headers, add <code>apikey</code> with the key below.</li>
      <li>Set Request Body to <b>JSON</b> and add three fields: <code>p_token</code> (Text, the token below), <code>p_steps</code> (Number, the Statistics result) and <code>p_date</code> (Text, the Formatted Date).</li>
      <li>Tap ▶. If it works, you see <b>ok</b> and your steps show up on Today within a few seconds.</li>
-     <li>Open the <b>Automation</b> tab and add <b>Time of Day</b> (9:00 PM, daily, <b>Run Immediately</b>) that runs “Send steps”.</li>
+     <li>To run it every night, open the <b>Automation</b> tab, tap <b>+</b> and choose <b>Time of Day</b>.</li>
+     <li>Set the time to <b>11:55 PM</b>, choose <b>Daily</b>, and tap <b>Next</b>.</li>
+     <li>Tap <b>Run Shortcut</b> and choose “Send steps”. Tap <b>Next</b>, set <b>Run Immediately</b> (not Ask Before Running), and tap <b>Done</b>.</li>
     </ol>${copyRow('URL',CFG.url+'/rest/v1/rpc/log_steps')}${copyRow('apikey header',CFG.key)}${copyRow('p_token',S.stepTok)}
     <div class="row" style="margin-top:10px"><button class="small" data-act="stepdone">Done</button></div>`;
   else if(S.stepLink)h+=`<p class="muted" style="margin-top:0">Automatic steps are on. ${S.stepLink.last_used?'Last received '+new Date(S.stepLink.last_used).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'.':'Nothing received yet.'}</p>
