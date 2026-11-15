@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # "edited" re-runs the checks when a PR's title or description is changed.
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 
@@ -98,10 +100,41 @@ jobs:
           fi
           echo "No secret keys found." >> "$GITHUB_STEP_SUMMARY"
 
+  attribution:
+    name: No AI attribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # The repo owner doesn't want AI attribution in PR titles, PR descriptions or commit messages.
+      # Some tools add a footer to a PR description on their own. This fails the PR so it can't be merged with one.
+      - name: PR text and commit messages are clean
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pattern='co-authored-by|claude-session|generated (by|with)|claude\.ai/code|noreply@anthropic\.com|🤖'
+          bad=0
+          if printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -n -i -E "$pattern"; then
+            echo "::error::The PR title or description has an AI attribution line. Edit the description on GitHub and delete it."
+            bad=1
+          fi
+          if git log --format='%h %B' "$BASE_SHA..$HEAD_SHA" | grep -n -i -E "$pattern"; then
+            echo "::error::A commit message has an AI attribution line. Fix it with a new commit; never rewrite pushed history."
+            bad=1
+          fi
+          [ "$bad" = 0 ] && echo "No AI attribution found." >> "$GITHUB_STEP_SUMMARY"
+          exit $bad
+
   gate:
     name: Merge gate
     if: always()
-    needs: [syntax, functions, sql, db, smoke, secrets]
+    needs: [syntax, functions, sql, db, smoke, secrets, attribution]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

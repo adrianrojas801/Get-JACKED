@@ -5,6 +5,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 ## Git and PR rules (non-negotiable)
 
 - **Never add AI attribution anywhere.** No `Co-Authored-By` trailers, no session links, no "Generated with Claude Code" (or similar) lines. This applies to commits, PR titles and bodies, comments, and code. Commits are authored as the repo owner only.
+- **A CI check, "No AI attribution", fails any PR whose title, description or commit messages carry attribution.** Some tools add a footer to a PR description by themselves, even when the text submitted has none. After opening or editing a PR, read the description back. If a footer is there, delete it by editing the description on github.com, which re-runs the check. Never merge with that check red.
 - **Commit identity:** `Adrian Rojas <145087441+adrianrojas801@users.noreply.github.com>`, unsigned. The repo is public, so never use a personal email address.
 - **Never force-push or rewrite pushed history.** Fix mistakes with a new commit or a new branch.
 - **Never push to `main`.** Do each change on its own branch (`feat/...`, `fix/...`, `chore/...`) and open a PR. The owner merges with a **merge commit** (squash and rebase are turned off), so never rewrite a branch to tidy it up.
