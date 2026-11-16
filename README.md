@@ -169,6 +169,8 @@ Each person gets 20 estimates a day. Change that with a `FOOD_DAILY_LIMIT` secre
 
 7. On your iPhone, open the app from the home screen, tap your initial, and tap **Turn on reminders**.
 
+Under Reminders you can switch each one off separately: the weigh-in nudge, the workout nudge and the rest done alert. Each person sets this for their own phone.
+
 **Not getting notifications?** Open the home-screen app, tap your initial, and tap **Send a test** under Reminders. It shows what the push service answered. A refusal usually means `vapidPublicKey` in `config.js` doesn't match `VAPID_PRIVATE_KEY` in Supabase.
 
 **Rest timer alert.** Once reminders are on, leaving the app while the rest timer runs sends a "Rest done" push when it ends. Coming back to the app cancels it. It uses the `rest-alert` function (deployed with the others, same VAPID secrets, no cron job). Supabase may stop background work after about 2.5 minutes on the free plan, so a rest longer than that may not alert.

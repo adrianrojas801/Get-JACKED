@@ -134,9 +134,12 @@ async def main():
         app = await page.inner_text("#app")
         check((await page.inner_text("#me")).upper() == "P" and "Sign out" in app and "Copy all data" in app,
               "Header button opens Account & data (account, backup)")
-        await page.evaluate("S.push = {on: true, endpoint: 'https://push.example.com/abcdefghij', morning: 8, evening: 18}; render()")
+        await page.evaluate("S.push = {on: true, endpoint: 'https://push.example.com/abcdefghij', morning: 8, evening: 18, notify_weigh: true, notify_train: true, notify_rest: true}; render()")
         await page.click("button[data-act=pushtest]"); await page.wait_for_timeout(300)
         check("sent. if nothing" in (await page.inner_text("#app")).lower(), "Send a test notification reports the result")
+        await page.uncheck("input[data-pushn=notify_rest]"); await page.wait_for_timeout(200)
+        check(await page.evaluate("S.push.notify_rest === false") and await page.is_checked("input[data-pushn=notify_weigh]"),
+              "Each notification has its own switch")
         await page.evaluate("S.push = {on: false}; S.pushNote = ''; render()")
         await page.wait_for_timeout(200)
         app = await page.inner_text("#app")

@@ -10,7 +10,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3";
 
-type Sub = { endpoint: string; user_id: string; p256dh: string; auth: string; tz: string; morning: number; evening: number };
+type Sub = { endpoint: string; user_id: string; p256dh: string; auth: string; tz: string; morning: number; evening: number; notify_weigh: boolean; notify_train: boolean };
 
 // The date, hour and weekday (0 = Sunday) right now in a time zone.
 function localNow(tz: string) {
@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
   for (const s of (subs ?? []) as Sub[]) {
     let now;
     try { now = localNow(s.tz); } catch { continue; }
-    const kind = now.hour === s.morning ? "weigh" : now.hour === s.evening ? "train" : null;
+    const kind = now.hour === s.morning ? (s.notify_weigh === false ? null : "weigh") : now.hour === s.evening ? (s.notify_train === false ? null : "train") : null;
     if (!kind) continue;
 
     const doc = async (coll: string, id: string) =>

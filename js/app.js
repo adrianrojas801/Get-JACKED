@@ -90,8 +90,8 @@ const hourLabel=h=>`${h%12||12} ${h<12?'AM':'PM'}`;
 async function loadPush(){
   try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
     if(!sub){S.push={on:false};return softRender()}
-    const {data}=await SB.from('push_subs').select('morning,evening').eq('endpoint',sub.endpoint).maybeSingle();
-    S.push=data?{on:true,endpoint:sub.endpoint,morning:data.morning,evening:data.evening}:{on:false}}
+    const {data}=await SB.from('push_subs').select('morning,evening,notify_weigh,notify_train,notify_rest').eq('endpoint',sub.endpoint).maybeSingle();
+    S.push=data?{on:true,endpoint:sub.endpoint,morning:data.morning,evening:data.evening,notify_weigh:data.notify_weigh!==false,notify_train:data.notify_train!==false,notify_rest:data.notify_rest!==false}:{on:false}}
   catch(e){S.push={on:false}}
   if(S.tab==='account')softRender();
 }
@@ -100,7 +100,7 @@ async function pushOn(){
     const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(CFG.vapidPublicKey)}),j=sub.toJSON();
     const row={endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,tz:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',morning:8,evening:18};
     const {error}=await SB.from('push_subs').upsert(row,{onConflict:'endpoint'});if(error)throw error;
-    S.pushMsg='';TM.ep=undefined;S.push={on:true,endpoint:row.endpoint,morning:8,evening:18}}
+    S.pushMsg='';TM.ep=undefined;S.push={on:true,endpoint:row.endpoint,morning:8,evening:18,notify_weigh:true,notify_train:true,notify_rest:true}}
   catch(e){S.pushMsg='Couldn’t turn reminders on. On an iPhone, add the app to your home screen first and open it from there.'}
   render();
 }
@@ -127,15 +127,19 @@ async function pushTest(){
   catch(e){S.pushMsg='Couldn’t send it. Try again.'}
   S.pushBusy=false;render();
 }
+async function pushToggle(field,on){if(!S.push||!S.push.on)return;S.push[field]=on;try{await SB.from('push_subs').update({[field]:on}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
 async function pushHour(field,h){if(!S.push||!S.push.on)return;S.push[field]=h;try{await SB.from('push_subs').update({[field]:h}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
 function remindersCard(){
   if(!ME.user||!pushReady())return '';
   if(S.push===undefined){loadPush();return ''}
-  const hours=(f,v)=>`<label class="f">${f==='morning'?'Weigh-in nudge':'Workout nudge'}<select data-push="${f}">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===v?'selected':''}>${hourLabel(h)}</option>`).join('')}</select></label>`;
+  const row=(n,label,f,v)=>`<div class="row between" style="margin-top:10px"><label class="check"><input type="checkbox" data-pushn="${n}" ${S.push[n]?'checked':''}> ${label}</label>${f?`<select data-push="${f}" style="width:auto" ${S.push[n]?'':'disabled'} aria-label="${label} time">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===v?'selected':''}>${hourLabel(h)}</option>`).join('')}</select>`:''}</div>`;
   let h=`<div class="card"><h2>Reminders</h2>`;
-  if(S.push.on)h+=`<p class="muted" style="margin-top:0">On for this phone. You get a weigh-in nudge if you haven’t logged your weight, and a workout nudge if it’s a training day and nothing’s logged.</p>
-    <div class="grid2">${hours('morning',S.push.morning)}${hours('evening',S.push.evening)}</div><div class="row wrap" style="margin-top:10px"><button class="small" data-act="pushtest">${S.pushBusy?'Sending…':'Send a test'}</button><button class="small" data-act="pushoff">Turn off</button></div>`;
-  else h+=`<p class="muted" style="margin-top:0">Get a morning weigh-in nudge and an evening nudge on training days you haven’t logged. On an iPhone this works from the home-screen app.</p><button class="small primary" data-act="pushon">Turn on reminders</button>`;
+  if(S.push.on)h+=`<p class="muted" style="margin-top:0">On for this phone. Pick which ones you want.</p>
+    ${row('notify_weigh','Weigh-in nudge','morning',S.push.morning)}<div class="muted">Only if you haven’t logged your weight yet.</div>
+    ${row('notify_train','Workout nudge','evening',S.push.evening)}<div class="muted">Only on a training day when nothing’s logged.</div>
+    ${row('notify_rest','Rest done alert',null)}<div class="muted">When your rest timer ends while the app is closed.</div>
+    <div class="row wrap" style="margin-top:12px"><button class="small" data-act="pushtest">${S.pushBusy?'Sending…':'Send a test'}</button><button class="small" data-act="pushoff">Turn off</button></div>`;
+  else h+=`<p class="muted" style="margin-top:0">Get a morning weigh-in nudge, an evening nudge on training days you haven’t logged, and an alert when your rest timer ends. On an iPhone this works from the home-screen app.</p><button class="small primary" data-act="pushon">Turn on reminders</button>`;
   if(S.pushMsg)h+=`<div class="err">${esc(S.pushMsg)}</div>`;
   if(S.pushNote)h+=`<div class="muted" style="margin-top:8px">${esc(S.pushNote)}</div>`;
   return h+`</div>`;

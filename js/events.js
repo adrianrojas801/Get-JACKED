@@ -36,6 +36,7 @@ app.addEventListener('change',e=>{
   if(el.id==='camfile'||el.id==='camretake'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}if(el.id==='camfile')S.snapTxt='';S.snap=null;S.sheet='cam';render()}return}
   if(el.id==='snapfile'){const f=el.files&&el.files[0];if(f){if(S.snapUrl){try{URL.revokeObjectURL(S.snapUrl)}catch(x){}}S.snapFile=f;try{S.snapUrl=URL.createObjectURL(f)}catch(x){S.snapUrl=null}S.snap=null;render()}return}
   if(ds.push){pushHour(ds.push,+el.value);return}
+  if(ds.pushn){pushToggle(ds.pushn,el.checked);return}
   if(el.id==='acboard'){setSharing(el.checked);return}
   if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;S.exOpen=null;render()}}
   else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;S.exOpen=null;render()}
