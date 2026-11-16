@@ -191,12 +191,13 @@ function endSwipe(){
 app.addEventListener('touchend',endSwipe);app.addEventListener('touchcancel',endSwipe);
 
 // ---------- swipe left or right between Body, Lifts and Friends on Progress ----------
+// Listens on the whole page, because a short section leaves empty space below #app.
 let PS=null;const PSEC=['body','lifts','friends'];
-app.addEventListener('touchstart',e=>{
-  PS=null;if(S.tab!=='progress'||S.sheet||e.touches.length!==1||e.target.closest('input,textarea,select,.sheet'))return;
+document.addEventListener('touchstart',e=>{
+  PS=null;if(S.tab!=='progress'||S.sheet||e.touches.length!==1||e.target.closest('input,textarea,select,.sheet,#nav,#timer'))return;
   PS={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()};
 },{passive:true});
-app.addEventListener('touchend',e=>{
+document.addEventListener('touchend',e=>{
   if(!PS||!e.changedTouches.length)return;const s=PS;PS=null;
   const dx=e.changedTouches[0].clientX-s.x,dy=e.changedTouches[0].clientY-s.y;
   if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5||Date.now()-s.t>800)return;
