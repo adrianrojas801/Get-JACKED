@@ -3,7 +3,7 @@
 // Loaded by index.html in a fixed order (see the <script> tags there). All files share one global scope.
 
 // ---------- events ----------
-$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;try{localStorage.setItem('gt_tab',S.tab)}catch(x){}render();window.scrollTo(0,0);const m=$('#app');m.classList.remove('enter');void m.offsetWidth;m.classList.add('enter');clearTimeout(m._et);m._et=setTimeout(()=>m.classList.remove('enter'),450)});
+$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;try{localStorage.setItem('gt_tab',S.tab)}catch(x){}render();{const c=S.tab==='workout'&&$('.exopen');if(c)c.scrollIntoView({block:'start'});else window.scrollTo(0,0)}const m=$('#app');m.classList.remove('enter');void m.offsetWidth;m.classList.add('enter');clearTimeout(m._et);m._et=setTimeout(()=>m.classList.remove('enter'),450)});
 const app=$('#app');
 app.addEventListener('input',e=>{
   const el=e.target,ds=el.dataset;

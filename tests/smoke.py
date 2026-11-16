@@ -341,6 +341,10 @@ async def main():
         done = (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']"))["ex"][1]["sets"][0]
         check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
         check("set 2 of 3" in (await page.inner_text(".exopen")).lower(), "Done moves on to the next set")
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(300)
+        await page.click("nav button[data-tab=workout]"); await page.wait_for_timeout(500)
+        top = await page.evaluate("document.querySelector('.exopen').getBoundingClientRect().top")
+        check(0 <= top < 300, "The Workout tab scrolls to the open exercise, not the top")
         await page.click("button.exrow[data-i='0']"); await page.wait_for_timeout(200)
         await page.fill("input[data-w='0'][data-s='0'][data-f=w]", "125"); await page.fill("input[data-w='0'][data-s='0'][data-f=r]", "10")
         await page.click("button[data-act=setdone]"); await page.wait_for_timeout(300)
