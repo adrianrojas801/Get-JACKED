@@ -182,6 +182,11 @@ def main():
               "Only the owner can change reminder times, and only to real hours")
         check(fails(f"insert into public.push_subs (user_id, endpoint, p256dh, auth) values ('{A}', 'https://push.example.com/zzzzzzzzzzzz', 'k', 'a')", B),
               "Nobody can subscribe a device as someone else")
+        psql("update public.push_subs set rest_until = now() + interval '90 seconds'", A)
+        psql("update public.push_subs set rest_until = null", B)
+        check(val("select count(*) from public.push_subs where rest_until is not null", A) == "1"
+              and val("select count(*) from public.push_subs where rest_until is not null", B) == "0",
+              "Only the owner can set or clear a rest alert time")
         psql("delete from public.push_subs", A)
         check(val("select count(*) from public.push_subs") == "0", "A person can remove their own subscription")
     except Exception as e:  # a setup step failed

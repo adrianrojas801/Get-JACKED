@@ -66,9 +66,28 @@ function blockWeek(){const b=T().block;if(!b)return null;const d=Math.floor((par
 
 // ---------- timer ----------
 const TM={end:0,iv:null};
-function startTimer(sec){TM.end=Date.now()+sec*1000;TM.buzzed=false;$('#timer').classList.add('show');$('#timer').classList.remove('over');clearInterval(TM.iv);TM.iv=setInterval(tick,250);tick()}
+function startTimer(sec){pushEndpoint();TM.end=Date.now()+sec*1000;TM.buzzed=false;$('#timer').classList.add('show');$('#timer').classList.remove('over');clearInterval(TM.iv);TM.iv=setInterval(tick,250);tick()}
 function tick(){const left=Math.round((TM.end-Date.now())/1000);const el=$('#tleft');
   if(left<=0){el.textContent='Rest done. Go!';$('#timer').classList.add('over');if(!TM.buzzed){TM.buzzed=true;try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}}if(left<-90)stopTimer();return}
   el.textContent=Math.floor(left/60)+':'+pad(left%60)}
-function stopTimer(){clearInterval(TM.iv);$('#timer').classList.remove('show','over')}
+function stopTimer(){clearInterval(TM.iv);TM.iv=null;$('#timer').classList.remove('show','over');disarmRest()}
+// Rest alert: the page can't run while the phone is locked, so when you leave the app mid-rest the rest-alert function pushes "Rest done" at the end time.
+// Needs reminders turned on (the same push subscription). Coming back to the app cancels it, since the timer is on screen again.
+async function armRest(){
+  if(!TM.iv||TM.end-Date.now()<3000||!SB||!SB.functions)return;
+  try{const ep=await pushEndpoint();if(ep)await SB.functions.invoke('rest-alert',{body:{endpoint:ep,at:TM.end}})}catch(e){}
+}
+async function disarmRest(){
+  try{const ep=await pushEndpoint();if(ep&&TM.armed){TM.armed=false;await SB.from('push_subs').update({rest_until:null}).eq('endpoint',ep)}}catch(e){}
+}
+async function pushEndpoint(){
+  if(TM.ep!==undefined)return TM.ep;
+  try{if(!(typeof pushReady==='function'&&pushReady())||Notification.permission!=='granted'){TM.ep=null;return null}
+    const sub=await (await navigator.serviceWorker.ready).pushManager.getSubscription();TM.ep=sub?sub.endpoint:null}catch(e){TM.ep=null}
+  return TM.ep;
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){if(TM.iv&&TM.end-Date.now()>=3000){TM.armed=true;armRest()}}
+  else if(TM.armed)disarmRest();
+});
 $('#timer').addEventListener('click',e=>{const t=e.target.dataset.t;if(!t)return;if(t==='stop')return stopTimer();TM.end+= +t*1000;if(TM.end-Date.now()>0)$('#timer').classList.remove('over');tick()});

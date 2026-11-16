@@ -22,7 +22,7 @@ New to the repo? Read **Start here**, then **How the app works**. Rules for comm
 | `config.js` | Supabase URL and **publishable** key. Public on purpose: row-level security (RLS) keeps data private. |
 | `vendor/supabase.js` | supabase-js, kept in the repo so there's no CDN. |
 | `supabase/migrations/` | Every database change, applied in order. |
-| `supabase/functions/` | Two optional server functions: `food-estimate` and `send-reminders`. |
+| `supabase/functions/` | Three optional server functions: `food-estimate`, `send-reminders` and `rest-alert`. |
 | `tests/` | Syntax, SQL, database-rules and browser smoke tests. |
 | `docs/EVIDENCE.md` | The research or practice behind every coaching rule. |
 | `.github/workflows/` | `ci.yml` (every PR), `deploy.yml` (after CI passes on `main`), `labeler.yml`. |
@@ -168,6 +168,8 @@ Each person gets 20 estimates a day. Change that with a `FOOD_DAILY_LIMIT` secre
    ```
 
 7. On your iPhone, open the app from the home screen, tap your initial, and tap **Turn on reminders**.
+
+**Rest timer alert.** Once reminders are on, leaving the app while the rest timer runs sends a "Rest done" push when it ends. Coming back to the app cancels it. It uses the `rest-alert` function (deployed with the others, same VAPID secrets, no cron job). Supabase may stop background work after about 2.5 minutes on the free plan, so a rest longer than that may not alert.
 
 ## Troubleshooting
 

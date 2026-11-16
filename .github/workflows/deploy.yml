@@ -63,6 +63,7 @@ jobs:
         run: |
           supabase functions deploy food-estimate --yes --project-ref "$PROJECT_ID"
           supabase functions deploy send-reminders --yes --project-ref "$PROJECT_ID"
+          supabase functions deploy rest-alert --yes --project-ref "$PROJECT_ID"
 
       - name: Auth settings (sign-ups off, site URL, redirect URLs)
         run: |

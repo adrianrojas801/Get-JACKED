@@ -341,6 +341,14 @@ async def main():
         done = (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']"))["ex"][1]["sets"][0]
         check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
         check("set 2 of 3" in (await page.inner_text(".exopen")).lower(), "Done moves on to the next set")
+        # Rest alert: leaving the app mid-rest asks the server to push when it ends; coming back cancels it.
+        await page.evaluate("TM.ep = 'https://push.example.com/abcdefghij'; startTimer(60); window.__calls.length = 0")
+        hide = "(h) => { Object.defineProperty(document, 'hidden', {configurable: true, get: () => h}); document.dispatchEvent(new Event('visibilitychange')); }"
+        await page.evaluate(hide, True); await page.wait_for_timeout(300)
+        check(await page.evaluate("window.__calls.some(c => c[0] === 'fn' && c[1] === 'rest-alert')"), "Leaving the app mid-rest asks for a Rest done alert")
+        await page.evaluate(hide, False); await page.wait_for_timeout(300)
+        check(await page.evaluate("window.__calls.some(c => c[0] === 'push_subs')"), "Coming back to the app cancels the alert")
+        await page.evaluate("stopTimer(); TM.ep = undefined")
         await page.click("button[data-act=cardio]"); await page.wait_for_timeout(300)
         check((await page.evaluate(f"window.__docs['days/{ago(0)}']")).get("cardio") == 20 and "done · 20 min" in (await page.inner_text("#app")).lower(), "The cardio card logs 20 minutes in one tap")
         await page.click("button[data-act=cardio]"); await page.wait_for_timeout(300)
