@@ -185,6 +185,9 @@ async function start(){
 }
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
 render();
+// Keep the timer and tab bar on top of the keyboard. iOS doesn't resize the page for it, so measure the gap and set --kb.
+{const vv=window.visualViewport;if(vv){const kb=()=>{const h=Math.max(0,Math.round(innerHeight-vv.height-vv.offsetTop));document.documentElement.style.setProperty('--kb',h+'px');document.body.classList.toggle('kb',h>80)};
+  vv.addEventListener('resize',kb);vv.addEventListener('scroll',kb);kb()}}
 if(!SB){S.boot=false;S.note='App isn’t configured: check config.js.';render()}
 else{
   SB.auth.onAuthStateChange((ev,session)=>{if(ev==='SIGNED_OUT'&&STARTED)location.replace(location.pathname)});
