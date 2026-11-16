@@ -58,10 +58,11 @@ function bodyCard(k,d){
   const lastW=(()=>{const ks=Object.keys(S.days).filter(x=>x<k&&num(S.days[x].weight)).sort();const lw=ks.length?num(S.days[ks[ks.length-1]].weight):(cfg().profile&&cfg().profile.weight);return lw?Number(lw).toFixed(1):'lbs'})();
   const measOn=S.bodyMore||MEAS.some(([f])=>num(d[f])!=null)||(k===today()&&measDue()&&measDays().length>0);
   const shown=BODY_MORE.filter(([f,,,,days])=>S.bodyMore||num(d[f])!=null||usedLately(f,days)),hidden=BODY_MORE.length-shown.length;
+  const more=[...BODY_MORE.filter(m=>!shown.includes(m)).map(m=>m[1].split(' ')[0].toLowerCase()),...(measOn?[]:['measurements'])].join(', ');
   return `<div class="card"><div class="row between"><h2 style="margin:0">Body</h2><label class="check"><input type="checkbox" data-day="creatine" ${d.creatine?'checked':''}> Creatine</label></div>
     <div class="grid2" style="margin-top:10px">${fld('weight',k===today()?'Weight this morning (lbs)':'Weight (lbs)',lastW)}${fld('steps','Steps','8000','1')}${shown.map(([f,l,ph,st])=>fld(f,l,ph,st)).join('')}</div>
     ${measOn?`<h3>${k===today()&&measDue()?'Measurement day (every 2 weeks)':'Measurements (in)'}</h3><div class="grid2">${MEAS.map(([f,l,ph])=>fld(f,l,ph)).join('')}</div>`:''}
-    ${hidden||S.bodyMore||!measOn?`<button class="link" data-act="bodymore" style="margin-top:6px">${S.bodyMore?'Show less':'Sleep, cardio, measurements'}</button>`:''}</div>`;
+    ${hidden||S.bodyMore||!measOn?`<button class="link" data-act="bodymore" style="margin-top:6px">${S.bodyMore?'Show less':more.charAt(0).toUpperCase()+more.slice(1)}</button>`:''}</div>`;
 }
 // ---------- getting set up ----------
 // A short checklist on Today for anyone who hasn't done the basics yet. It goes away when they're done, or on Hide.
@@ -69,7 +70,7 @@ const firstSteps=()=>[
   ['Log a workout',Object.values(S.workouts).some(trained),'Tap Open workout and log your sets.'],
   ['Weigh in',Object.values(S.days).some(d=>d&&num(d.weight)),'In the morning, before you eat. It goes under Body.'],
   ['Log a day of food',Object.values(S.days).some(d=>d&&(d.food||[]).length),'Tap a food under Food, or Add foods for the full list.'],
-  ['Take your starting measurements',measDays().length>0,'Under Body, tap Sleep, cardio, measurements.']];
+  ['Take your starting measurements',measDays().length>0,'Under Body, tap the link at the bottom.']];
 function firstStepsCard(){
   if(cfg().welcomed)return '';
   const st=firstSteps(),done=st.filter(x=>x[1]).length;if(done===st.length)return '';
