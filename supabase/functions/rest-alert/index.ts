@@ -17,7 +17,7 @@ declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
 const MAX_WAIT_MS = 10 * 60 * 1000;
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method !== "POST") return new Response("no", { status: 405 });
   const pub = Deno.env.get("VAPID_PUBLIC_KEY"), priv = Deno.env.get("VAPID_PRIVATE_KEY");
   if (!pub || !priv) return Response.json({ error: "not_configured" }, { status: 503 });
@@ -76,4 +76,15 @@ Deno.serve(async (req) => {
     }
   })());
   return Response.json({ ok: true });
+}
+
+Deno.serve(async (req) => {
+  try {
+    return await handle(req);
+  } catch (e) {
+    // Say what broke (for example a malformed push key) so the app's test button can show it. No user data is in these messages.
+    const detail = String((e as Error)?.message ?? e).slice(0, 200);
+    console.error("rest-alert: unexpected error", detail);
+    return Response.json({ error: "server_error", detail }, { status: 500 });
+  }
 });
