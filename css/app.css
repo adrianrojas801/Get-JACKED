@@ -135,8 +135,12 @@ nav button.on{color:var(--accent);background:var(--accent-soft)}
 #timer.over button{color:var(--card)}
 table.simple{width:100%;border-collapse:collapse;font-size:14px}
 table.simple td,table.simple th{padding:8px 4px;border-top:1px solid var(--line);text-align:left}
-table.simple tr.tdy td{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 18px color-mix(in srgb,var(--accent) 50%,transparent);color:var(--accent);font-weight:700}
-table.simple tr.tdy td:first-child{border-radius:10px 0 0 10px;clip-path:inset(-30px 0 -30px -30px)}table.simple tr.tdy td:last-child{border-radius:0 10px 10px 0;clip-path:inset(-30px -30px -30px 0)}
+/* Today's row in a table: one soft green bar behind the whole row (a pseudo-element as wide as the card), so there is no seam between cells */
+.cq{container-type:inline-size}
+table.simple tr.tdy td{color:var(--accent);font-weight:700;border-top-color:transparent}
+table.simple tr.tdy+tr td{border-top-color:transparent}
+table.simple tr.tdy td:first-child{position:relative;isolation:isolate}
+table.simple tr.tdy td:first-child::before{content:'';position:absolute;z-index:-1;left:0;top:0;bottom:0;width:100cqw;border-radius:12px;background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 18px color-mix(in srgb,var(--accent) 50%,transparent)}
 table.simple th{font-size:11.5px;color:var(--muted);font-weight:650;border-top:none;text-transform:uppercase;letter-spacing:.05em}
 ul.plain{margin:4px 0;padding-left:18px}
 ul.plain li{margin:5px 0}

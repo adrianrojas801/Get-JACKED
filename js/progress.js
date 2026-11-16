@@ -400,7 +400,7 @@ function submitIntake(){
 }
 function viewProgramEditor(){
   const P=PROG(),keys=P.order.filter(k=>P.days[k]),opts=[...keys.map(k=>[k,P.days[k].t]),['rest','Rest']];
-  let h=`<div class="card"><h2>Weekly split</h2><table class="simple">${DAYNAMES.map((dn,i)=>{const cur=P.days[P.sched[i]]?P.sched[i]:'rest';return `<tr class="${i===parseKey(today()).getDay()?'tdy':''}"><td>${dn}</td><td><select data-sched="${i}" aria-label="${dn}">${opts.map(([v,l])=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(l)}</option>`).join('')}</select></td></tr>`}).join('')}</table></div>`;
+  let h=`<div class="card cq"><h2>Weekly split</h2><table class="simple">${DAYNAMES.map((dn,i)=>{const cur=P.days[P.sched[i]]?P.sched[i]:'rest';return `<tr class="${i===parseKey(today()).getDay()?'tdy':''}"><td>${dn}</td><td><select data-sched="${i}" aria-label="${dn}">${opts.map(([v,l])=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(l)}</option>`).join('')}</select></td></tr>`}).join('')}</table></div>`;
   h+=`<div class="card"><h2>Your program</h2><div class="muted">Tap a day to edit it. Changes apply to new workouts. Workouts you already logged stay the same.</div>`;
   for(const k of keys){const d=P.days[k];
     h+=`<details class="pday" ${S.openDay===k?'open':''}><summary><b>${esc(d.t)}</b><span class="muted">${d.ex.length} exercise${d.ex.length===1?'':'s'}</span></summary>
