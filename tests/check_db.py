@@ -195,6 +195,12 @@ def main():
         check(svc("insert into public.docs (user_id, coll, id, data) values ('" + A + "', 'days', '2026-01-01', '{}')").returncode != 0
               and svc("select count(*) from public.board").returncode != 0,
               "The server functions get nothing beyond that")
+        check(val("select notify_weigh and notify_train and notify_rest from public.push_subs", A) == "t",
+              "All notifications start on")
+        psql("update public.push_subs set notify_rest = false", A)
+        psql("update public.push_subs set notify_weigh = false", B)
+        check(val("select notify_rest::text || notify_weigh::text from public.push_subs", A) == "falsetrue",
+              "A person can switch off their own notifications and nobody else's")
         psql("delete from public.push_subs", A)
         check(val("select count(*) from public.push_subs") == "0", "A person can remove their own subscription")
     except Exception as e:  # a setup step failed

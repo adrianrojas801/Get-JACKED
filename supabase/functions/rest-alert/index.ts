@@ -49,9 +49,11 @@ async function handle(req: Request): Promise<Response> {
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data: who, error: whoErr } = await admin.auth.getUser(token);
   if (whoErr || !who?.user) { console.error("rest-alert: bad token", whoErr?.message); return json({ error: "unauthorized" }, 401); }
-  const { data: owned, error: ownErr } = await admin.from("push_subs").select("endpoint").eq("endpoint", endpoint).eq("user_id", who.user.id).maybeSingle();
+  const { data: owned, error: ownErr } = await admin.from("push_subs").select("endpoint,notify_rest").eq("endpoint", endpoint).eq("user_id", who.user.id).maybeSingle();
   if (ownErr) { console.error("rest-alert: lookup failed", ownErr.message); return json({ error: "failed", detail: ownErr.message }, 500); }
   if (!owned) return json({ error: "not_found" }, 404);
+  // The person turned Rest done alerts off for this phone. A test still goes through.
+  if (!test && owned.notify_rest === false) return json({ ok: true, skipped: true });
 
   if (test) {
     webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com", pub, priv);
