@@ -343,6 +343,10 @@ async def main():
         check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1
               and await page.locator("button[data-act=wstart]").count() == 0,
               "Start opens the first exercise, the rest fold to a line with today's target")
+        await page.click("button[data-act=wreset]"); await page.wait_for_timeout(300)
+        check(await page.locator("button[data-act=wstart]").count() == 1 and await page.locator(".exopen").count() == 0
+              and not (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']")).get("t0"), "Undo start clears the start time and folds everything again")
+        await page.click("button[data-act=wstart]"); await page.wait_for_timeout(300)
         await page.click("button.exrow[data-i='1']"); await page.wait_for_timeout(200)
         rep = "input[data-w='1'][data-s='0'][data-f=r]"
         await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='1']")

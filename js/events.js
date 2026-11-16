@@ -104,6 +104,10 @@ app.addEventListener('click',e=>{
       if(nx!==i){const c=$('.exopen');if(c)c.scrollIntoView({block:'start',behavior:'smooth'})}
       if(pr){toast(`New best: ${ex.n} ${b.top}`);try{navigator.vibrate&&navigator.vibrate([60,40,120])}catch(x){}}}
     else{s.d=false;putWorkout(w);render()}}
+  // Undo start: clears the start time. If sets were logged, they are cleared too (Undo puts it all back).
+  else if(act==='wreset'){const before=curWorkout(),w=curWorkout(),had=w.ex.some(e=>e.sets.some(x=>x.d));
+    delete w.t0;delete w.t1;w.done=false;w.ex.forEach(e=>e.sets.forEach(x=>{x.w='';x.r='';x.d=false}));
+    S.exOpen=null;S.swap=null;stopTimer();putWorkout(w);render();toast(had?'Workout reset':'Start undone',()=>putWorkout(before))}
   else if(act==='exopen'){S.exOpen=i;S.swap=null;render()}
   else if(act==='wstart'){const w=curWorkout();if(!w.t0)w.t0=Date.now();S.exOpen=w.ex.findIndex(setsLeft);S.swap=null;putWorkout(w);render();const c=$('.exopen');if(c)c.scrollIntoView({block:'start',behavior:'smooth'})}
   // − / + on the set you're on. An empty field starts from today's target, so one tap means "one more (or less) than planned".
