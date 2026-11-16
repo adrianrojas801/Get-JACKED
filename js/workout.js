@@ -119,9 +119,17 @@ function viewWorkout(){
   w.ex.forEach((e,i)=>{h+=exCard(w,id,i,i===open)});
   if(S.addEx)h+=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Add exercise</h2><button class="small" data-act="axclose">Cancel</button></div><div class="grid3"><input id="axn" placeholder="Name" style="grid-column:1/4"><input id="axs" type="number" inputmode="numeric" value="3" placeholder="sets"><input id="axr" value="8-12" placeholder="reps (8-12)"><button class="primary" data-act="axadd">Add</button></div></div>`;
   else h+=`<button data-act="axopen" style="width:100%;margin:4px 0">+ Add exercise</button>`;
+  h+=cardioCard(w.date);
   h+=`<div class="card"><label class="f">Session notes<textarea data-wnote="1" placeholder="How it felt, what to change…">${esc(w.note||'')}</textarea></label></div>`;
   h+=`<button class="primary" data-act="finish" style="width:100%;padding:12px">${w.done?'Update finished workout':'Finish workout'}</button>`;
   return h;
+}
+// Optional 20 minute incline walk. One tap logs 20 minutes as the day's cardio (the same field as Cardio under Today > Body).
+function cardioCard(date){
+  const mins=num((S.days[date]||{}).cardio)||0;
+  return `<div class="card">${titled('cardio','Cardio (optional)','A steady incline walk raises your heart rate with little leg fatigue, so it won’t get in the way of your next lifting day. Pick the incline where you can still talk. Don’t hold the handrails. This is common practice, not a tested protocol. Tapping the button logs 20 minutes under Cardio on Today.')}
+    <table class="simple"><tr><td>3 min</td><td>2.5 mph</td><td>0–5% incline</td></tr><tr><td>15 min</td><td>3.0 mph</td><td>10–12% incline</td></tr><tr><td>2 min</td><td>2.5 mph</td><td>0–3% incline</td></tr></table>
+    ${mins>0?`<div class="row between" style="margin-top:10px"><b>Done · ${mins} min ✓</b><button class="small" data-act="cardio">Remove</button></div>`:`<button class="primary" data-act="cardio" style="width:100%;margin-top:10px">Did it · 20 min</button>`}</div>`;
 }
 const setsLeft=e=>e.sets.some(s=>!s.d);
 const targetOf=(w,id,e)=>{const last=lastFor(e.n,w.date,id),stall=stallOf(liftHistory(e.n,w.date,id));return {last,stall,tg:targetFor(last,withJump(e,w.prog),stall)}};

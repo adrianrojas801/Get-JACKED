@@ -20,6 +20,7 @@ Checked: November 2026.
 | Estimated 1-rep max uses the Epley formula (`e1rm`). | Practice | A standard estimate. It is less accurate above about 10 reps, so use it for trends, not as a true max. |
 | Generated programs train each muscle about twice a week. | Research | Pelland et al. 2025: once weekly sets are equal, frequency adds little for growth, so the split is chosen for schedule and recovery |
 | People lifting under a year get at most 3 sets per exercise and 7 exercises a day. | Practice | Follows from the diminishing returns above |
+| An optional 20 minute cardio card on each workout: 3 min easy, 15 min incline walk (3.0 mph, 10–12%), 2 min cool-down. | Practice | A common incline-walking routine, not a tested protocol. Easy walking adds calories burned and heart health without much leg fatigue, so it should not cut into recovery. |
 | Supersets and drop sets are allowed to save time. | Practice | Treated as time-savers, not as better for growth |
 
 ## Nutrition and bodyweight
