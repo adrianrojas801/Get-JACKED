@@ -5,7 +5,7 @@
 // ---------- events ----------
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;try{localStorage.setItem('gt_tab',S.tab)}catch(x){}const y0=scrollY;render();
   // Workout with an open exercise: stay where you were and glide to it, with no fade-in, so it doesn't feel like a new page.
-  const c=S.tab==='workout'&&$('.exopen'),m=$('#app');m.classList.remove('enter');
+  const c=S.tab==='workout'&&S.wp!=='rest'&&wLive(curWorkout())&&$('.exopen'),m=$('#app');m.classList.remove('enter');
   if(c){window.scrollTo(0,Math.min(y0,Math.max(0,document.documentElement.scrollHeight-innerHeight)));c.scrollIntoView({block:'start',behavior:'smooth'})}
   else{window.scrollTo(0,0);void m.offsetWidth;m.classList.add('enter');clearTimeout(m._et);m._et=setTimeout(()=>m.classList.remove('enter'),450)}});
 const app=$('#app');
@@ -105,6 +105,7 @@ app.addEventListener('click',e=>{
       if(pr){toast(`New best: ${ex.n} ${b.top}`);try{navigator.vibrate&&navigator.vibrate([60,40,120])}catch(x){}}}
     else{s.d=false;putWorkout(w);render()}}
   else if(act==='exopen'){S.exOpen=i;S.swap=null;render()}
+  else if(act==='wstart'){const w=curWorkout();if(!w.t0)w.t0=Date.now();S.exOpen=w.ex.findIndex(setsLeft);S.swap=null;putWorkout(w);render();const c=$('.exopen');if(c)c.scrollIntoView({block:'start',behavior:'smooth'})}
   // − / + on the set you're on. An empty field starts from today's target, so one tap means "one more (or less) than planned".
   else if(act==='step'){const w=curWorkout(),j=+ds.j,s=w.ex[i].sets[j],f=ds.f;if(!s)return;
     const cur=s[f]===''?(num(setDefault(w,i,j)[f])||0):+s[f];s[f]=Math.max(f==='r'?1:0,cur+(+ds.v));putWorkout(w,700);

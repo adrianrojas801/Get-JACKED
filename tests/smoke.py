@@ -335,9 +335,14 @@ async def main():
 
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
+        check(await page.locator("button.exrow").count() == 2 and await page.locator(".exopen").count() == 0
+              and await page.locator("button[data-act=wstart]").count() == 1, "Before you start, every exercise is folded and Start workout shows")
+        await page.click("button[data-act=wstart]"); await page.wait_for_timeout(500)
+        app = await page.inner_text("#app")
         check("no new best in 3 sessions" in app.lower() and "110 × 12, 12, 12" in app, "A stalled lift gets a back-off suggestion and a lighter target")
-        check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1,
-              "One exercise is open, the rest fold to a line with today's target")
+        check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1
+              and await page.locator("button[data-act=wstart]").count() == 0,
+              "Start opens the first exercise, the rest fold to a line with today's target")
         await page.click("button.exrow[data-i='1']"); await page.wait_for_timeout(200)
         rep = "input[data-w='1'][data-s='0'][data-f=r]"
         await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='1']")
