@@ -3,10 +3,12 @@
 // Loaded by index.html in a fixed order (see the <script> tags there). All files share one global scope.
 
 // ---------- events ----------
-$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;try{localStorage.setItem('gt_tab',S.tab)}catch(x){}const y0=scrollY;render();
+$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const same=S.tab===b.dataset.tab;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;try{localStorage.setItem('gt_tab',S.tab)}catch(x){}const y0=scrollY;render();
   // Workout with an open exercise: stay where you were and glide to it, with no fade-in, so it doesn't feel like a new page.
   const c=S.tab==='workout'&&S.wp!=='rest'&&wLive(curWorkout())&&$('.exopen'),m=$('#app');m.classList.remove('enter');
   if(c){window.scrollTo(0,Math.min(y0,Math.max(0,document.documentElement.scrollHeight-innerHeight)));c.scrollIntoView({block:'start',behavior:'smooth'})}
+  // Tapping the tab you're already on glides to the top. Switching to another tab jumps.
+  else if(same){window.scrollTo(0,Math.min(y0,Math.max(0,document.documentElement.scrollHeight-innerHeight)));glideTop()}
   else{window.scrollTo(0,0);void m.offsetWidth;m.classList.add('enter');clearTimeout(m._et);m._et=setTimeout(()=>m.classList.remove('enter'),450)}});
 const app=$('#app');
 app.addEventListener('input',e=>{

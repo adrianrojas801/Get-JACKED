@@ -390,6 +390,10 @@ async def main():
         check(await page.locator(".seg[role=tablist] button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
               "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        await page.evaluate("document.body.style.minHeight = '3000px'; window.scrollTo(0, 800)"); await page.wait_for_timeout(200)
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(1200)
+        check(await page.evaluate("scrollY") < 5, "Tapping the tab you're on glides back to the top")
+        await page.evaluate("document.body.style.minHeight = ''")
         png = __import__("base64").b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
         for stamp in ("a", "b"):
             await page.set_input_files("#photofile", {"name": f"{stamp}.png", "mimeType": "image/png", "buffer": png}); await page.wait_for_timeout(500)
