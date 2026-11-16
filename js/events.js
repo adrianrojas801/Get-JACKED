@@ -126,6 +126,7 @@ app.addEventListener('click',e=>{
   else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
   else if(act==='pushon')pushOn();
   else if(act==='pushoff')pushOff();
+  else if(act==='pushtest')pushTest();
   else if(act==='stepnew')newStepLink();
   else if(act==='stepoff')stopStepLink();
   else if(act==='stepdone'){S.stepTok=null;render()}

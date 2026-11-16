@@ -134,6 +134,10 @@ async def main():
         app = await page.inner_text("#app")
         check((await page.inner_text("#me")).upper() == "P" and "Sign out" in app and "Copy all data" in app,
               "Header button opens Account & data (account, backup)")
+        await page.evaluate("S.push = {on: true, endpoint: 'https://push.example.com/abcdefghij', morning: 8, evening: 18}; render()")
+        await page.click("button[data-act=pushtest]"); await page.wait_for_timeout(300)
+        check("sent. if nothing" in (await page.inner_text("#app")).lower(), "Send a test notification reports the result")
+        await page.evaluate("S.push = {on: false}; S.pushNote = ''; render()")
         await page.wait_for_timeout(200)
         app = await page.inner_text("#app")
         check("intake requests" in app.lower() and "pablo" in app and "· New" in app, "Admin sees the intake request")

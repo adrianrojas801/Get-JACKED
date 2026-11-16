@@ -71,6 +71,7 @@ window.supabase={createClient(){
     // Edge Functions. Photo estimates report "ready" only when sessionStorage.mockest is '1'.
     functions:{invoke:async(name,{body})=>{__calls.push(['fn',name]);
       if(offline())return {data:null,error:{message:'Failed to send a request to the Edge Function'}};
+      if(name==='rest-alert')return {data:{ok:true,status:201},error:null};
       if(name!=='food-estimate')return {data:null,error:{message:'not found'}};
       if(body.ping)return {data:{ready:sessionStorage.getItem('mockest')==='1'},error:null};
       window.__lastEstimate=body;return {data:{items:[{n:'Test taco',c:150,p:9,q:3}],note:'Assumed corn tortillas.'},error:null}}},
