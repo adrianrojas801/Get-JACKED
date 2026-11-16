@@ -100,14 +100,14 @@ async function pushOn(){
     const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(CFG.vapidPublicKey)}),j=sub.toJSON();
     const row={endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,tz:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',morning:8,evening:18};
     const {error}=await SB.from('push_subs').upsert(row,{onConflict:'endpoint'});if(error)throw error;
-    S.pushMsg='';S.push={on:true,endpoint:row.endpoint,morning:8,evening:18}}
+    S.pushMsg='';TM.ep=undefined;S.push={on:true,endpoint:row.endpoint,morning:8,evening:18}}
   catch(e){S.pushMsg='Couldn’t turn reminders on. On an iPhone, add the app to your home screen first and open it from there.'}
   render();
 }
 async function pushOff(){
   try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
     if(sub){await SB.from('push_subs').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch(e){}
-  S.push={on:false};render();
+  TM.ep=undefined;S.push={on:false};render();
 }
 async function pushHour(field,h){if(!S.push||!S.push.on)return;S.push[field]=h;try{await SB.from('push_subs').update({[field]:h}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
 function remindersCard(){

@@ -32,7 +32,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 | `index.html` | The page shell: header, tab bar, and the `<script>` tags that load the app in order |
 | `css/app.css` | All styles |
 | `js/*.js` | The app, split by area and loaded in this order: `program`, `core`, `training`, `shared`, `today`, `workout`, `progress`, `plan`, `events`, `app`. Each file says what it holds at the top. |
-| `supabase/functions/` | Edge Functions: `food-estimate` (photo food estimates) and `send-reminders` (push reminders). Deployed only when the repo variable `DEPLOY_FUNCTIONS` is `true`. |
+| `supabase/functions/` | Edge Functions: `food-estimate` (photo food estimates), `send-reminders` (push reminders) and `rest-alert` (a "Rest done" push when the rest timer ends while the app is closed). Deployed only when the repo variable `DEPLOY_FUNCTIONS` is `true`. |
 | `docs/EVIDENCE.md` | The research or practice behind every coaching rule |
 | `sw.js` | Service worker that keeps the app's own files on the phone so it opens offline |
 | `config.js` | Supabase project URL and **publishable** key (public by design) |
@@ -66,6 +66,7 @@ Instructions for any AI assistant working in this repo. Follow them exactly.
 - **Measurements and photos:** tape measurements are fields on the day doc (`MEAS`). Progress photos are files in the private `progress` storage bucket under `<user id>/<date>_<pose>_<time>.jpg`, shrunk in the browser by `shrinkImage()`.
 - **Head to head:** `weekScore()` scores one week's board rows with the categories in `H2H`. It reads the board; it must not need anything the board doesn't already share.
 - **Optional server features:** photo estimates (`probeEstimates()` → `edgeSampler()` → the `food-estimate` function) and reminders (`remindersCard()`, `push_subs`, the `send-reminders` function, the `push` handler in `sw.js`). Both stay hidden until configured: estimates (the camera button and Snap or describe) until the function answers `{ready:true}`, checked when Today loads and each time Add foods opens until it is ready, reminders until `config.js` has `vapidPublicKey`. Keep them hidden-by-default; never show a button that can't work.
+- **Rest alert:** when the page goes hidden mid-rest, `armRest()` (training.js) calls `rest-alert` with the device's push endpoint and the timer end time; the function stores it in `push_subs.rest_until`, waits in the background, and sends only if that time is still there. Coming back (`disarmRest()`) or stopping the timer clears it. It needs reminders turned on and never alerts while the app is visible.
 - **Design rules:**
   - Advice always uses the coach style: build it with `coachOpen(title)` (check-in, suggestions, phase change, new program, the setup checklist). Don't invent another highlighted card.
   - Keep cards to numbers and actions. Put the explanation behind the (i) button with `titled(id, title, text)`.
