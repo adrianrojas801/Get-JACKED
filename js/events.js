@@ -50,7 +50,7 @@ app.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||!b.dataset.act)return;const ds=b.dataset,act=ds.act,i=+ds.i;
   if(act==='day'){S.dk=addDays(S.dk,+ds.v);if(S.dk>today())S.dk=today();render()}
   else if(act==='gotoday'){S.dk=today();render()}
-  else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.exOpen=null;S.tab='workout';render();window.scrollTo(0,0)}
+  else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.exOpen=null;S.tab='workout';render();glideTop()}
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
   else if(act==='foods'){S.sheet='foods';S.qedit=false;render();probeEstimates()}
   else if(act==='sheetx'){S.sheet=null;S.qedit=false;render()}
@@ -65,7 +65,7 @@ app.addEventListener('click',e=>{
   else if(act==='reqresend'){S.reqSendMsg='Sending…';render();sendIntake()}
   else if(act==='planuse')applyPlan();
   else if(act==='planlater'){S.planLater=true;render()}
-  else if(act==='redo'){S.redo=true;S.draft=null;render();window.scrollTo(0,0)}
+  else if(act==='redo'){S.redo=true;S.draft=null;render();glideTop()}
   else if(act==='redox'){S.redo=false;S.draft=null;render()}
   else if(act==='pexmv'||act==='pexdel'||act==='pexadd'){const s=clone(cfg());const d=s.program&&s.program.days[ds.k];if(!d)return;S.openDay=ds.k;
     if(act==='pexmv'){const j=i+(+ds.v);if(j<0||j>=d.ex.length)return;[d.ex[i],d.ex[j]]=[d.ex[j],d.ex[i]]}
@@ -129,7 +129,7 @@ app.addEventListener('click',e=>{
   else if(act==='axopen'){S.addEx=true;render();const x=$('#axn');x&&x.focus()}
   else if(act==='axadd'){const n=$('#axn').value.trim();if(!n)return;const sets=Math.max(1,Math.min(10,num($('#axs').value)||3));const r=($('#axr').value||'8-12').replace(/[–—]/g,'-');const w=curWorkout();
     w.ex.push({n,s:sets,r:/^\d+-\d+$/.test(r)?r:'8-12',rest:90,ss:'',note:'',ti:null,sets:Array.from({length:sets},()=>({w:'',r:'',d:false}))});putWorkout(w);S.addEx=false;S.exOpen=w.ex.length-1;render()}
-  else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();window.scrollTo(0,0)}
+  else if(act==='finish'){const w=curWorkout();if(!w.done)w.t1=Date.now();w.done=true;putWorkout(w);flushAll();stopTimer();render();glideTop()}
   else if(act==='pushon')pushOn();
   else if(act==='pushoff')pushOff();
   else if(act==='pushtest')pushTest();
@@ -138,7 +138,7 @@ app.addEventListener('click',e=>{
   else if(act==='stepdone'){S.stepTok=null;render()}
   else if(act==='cp'){Promise.resolve().then(()=>navigator.clipboard.writeText(ds.cp)).then(()=>toast('Copied'),()=>toast('Press and hold the text to copy it'))}
   else if(act==='boardwk'){S.boardWeek=ds.v;render()}
-  else if(act==='psec'){S.psec=ds.v;S.showCheckin=false;render();window.scrollTo(0,0)}
+  else if(act==='psec'){S.psec=ds.v;S.showCheckin=false;render();glideTop()}
   else if(act==='recall'){S.recAll=!S.recAll;render()}
   else if(act==='adjcal'){const s=clone(cfg());s.cal=T().cal+(+ds.v);s.calAdj=weekStart(today());putSettings(s);render()}
   else if(act==='focus'){const s=clone(cfg()),f=focusList();s.focus=f.includes(ds.k)?f.filter(k=>k!==ds.k):[...f,ds.k];putSettings(s);render()}
@@ -147,7 +147,7 @@ app.addEventListener('click',e=>{
   // Deleting a photo is permanent, so it takes a second tap on the same button.
   else if(act==='photodel'){if(S.photoDel===ds.p)delPhoto(ds.p);else{S.photoDel=ds.p;render()}}
   else if(act==='sugdo'){const sg=suggestions().find(x=>x.id===ds.id);if(!sg)return;const before=clone(cfg()),s=clone(cfg());sg.apply(s);putSettings(s);render();toast('Plan updated: '+sg.text,()=>putSettings(before))}
-  else if(act==='gosug'){S.tab='plan';render();window.scrollTo(0,0)}
+  else if(act==='gosug'){S.tab='plan';render();glideTop()}
   else if(act==='sugskip'){const s=clone(cfg());s.skipSug=Object.assign({},s.skipSug,{[ds.id]:weekStart(today())});putSettings(s);render()}
   else if(act==='cardio'){const before=dayDoc(S.wd),d=dayDoc(S.wd);if(num(d.cardio)>0){delete d.cardio;putDay(S.wd,d);render();undoDay(S.wd,before,'cardio')}else{d.cardio=20;putDay(S.wd,d);render()}}
   else if(act==='info'){S.info=Object.assign({},S.info,{[ds.id]:!(S.info&&S.info[ds.id])});render()}
@@ -208,7 +208,7 @@ document.addEventListener('touchend',e=>{
   if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5||Date.now()-s.t>800)return;
   const i=PSEC.indexOf(PSEC.includes(S.psec)?S.psec:'body')+(dx<0?1:-1);
   if(i<0||i>=PSEC.length)return;
-  S.psec=PSEC[i];S.showCheckin=false;render();window.scrollTo(0,0);
+  S.psec=PSEC[i];S.showCheckin=false;render();glideTop();
 },{passive:true});
 
 // ---------- drag to reorder ----------

@@ -127,7 +127,7 @@ async function applyPlan(){
   if(np.plan.presets&&np.plan.presets.length){const ps=Array.isArray(s.presets)?s.presets:clone(presets());for(const q of np.plan.presets)if(!ps.some(y=>y.n===q.n))ps.push(q);s.presets=ps;
     const gs=Array.isArray(s.foodGroups)?s.foodGroups:foodGroups().slice();for(const q of np.plan.presets)if(!gs.includes(q.g))gs.push(q.g);s.foodGroups=gs}
   if(np.plan.cal)s.cal=np.plan.cal;if(np.plan.pro)s.pro=np.plan.pro;if(np.plan.focus)s.focus=np.plan.focus;
-  putSettings(s);S.newPlan=null;S.wp=null;S.flash='You’re on your new program. You can still change it under Plan.';render();window.scrollTo(0,0);
+  putSettings(s);S.newPlan=null;S.wp=null;S.flash='You’re on your new program. You can still change it under Plan.';render();glideTop();
   try{await SB.rpc('mark_intake_applied',{p_id:np.id})}catch(e){}
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.loaded){checkPlan();if(S.tab==='account')loadReqs()}});

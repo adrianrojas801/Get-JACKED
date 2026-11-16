@@ -78,6 +78,8 @@ function hold(path,p,patch){
 // The last synced data and any writes still waiting are kept in localStorage, per person,
 // so the app opens and logs with no signal. Supabase stays the source of truth: whatever it sends replaces the copy.
 const OFFLINE_SAVED='Offline · saved on this phone';
+// Glide back to the top. Used everywhere except the footer tabs and the account button, which jump.
+const glideTop=()=>window.scrollTo({top:0,behavior:'smooth'});
 const LS={get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 const lsKey=n=>'gj_'+n+'_'+(ME.user?ME.user.id:'');
 function keepCopy(){if(!ME.user||!S.loaded)return;clearTimeout(keepCopy.t);keepCopy.t=setTimeout(()=>LS.set(lsKey('copy'),{days:S.days,workouts:S.workouts,settings:S.settings,profile:ME.profile}),800)}
