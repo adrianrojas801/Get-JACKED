@@ -113,11 +113,16 @@ async function pushOff(){
 async function pushTest(){
   if(!S.push||!S.push.on||S.pushBusy)return;S.pushBusy=true;S.pushMsg='';S.pushNote='';render();
   try{const {data,error}=await SB.functions.invoke('rest-alert',{body:{endpoint:S.push.endpoint,test:true}});
-    if(error||!data)S.pushMsg='Couldn’t reach the server. Check your connection, and that the functions are deployed.';
-    else if(data.ok)S.pushNote='Sent. If nothing shows up in a few seconds, open your phone’s Settings → Notifications → Get Jacked and allow banners.';
-    else if(data.error==='push_failed')S.pushMsg=data.status===404||data.status===410?'This phone’s subscription expired. Turn reminders off and on again.':`The push service refused it (code ${data.status||'none'}). The push keys on the server may not match config.js.`;
-    else if(data.error==='not_configured')S.pushMsg='The push keys aren’t set up on the server yet.';
-    else S.pushMsg='Couldn’t send it. Turn reminders off and on again, then retry.'}
+    let r=data,code=0;
+    if(error){const c=error.context;code=c&&c.status||0;r=null;try{r=c&&await c.json()}catch(e){}}
+    if(r&&r.ok)S.pushNote='Sent. If nothing shows up in a few seconds, open your phone’s Settings → Notifications → Get Jacked and allow banners.';
+    else if(r&&r.error==='push_failed')S.pushMsg=r.status===404||r.status===410?'This phone’s subscription expired. Turn reminders off and on again.':`The push service refused it (code ${r.status||'none'}). The push keys on the server may not match config.js.`;
+    else if(r&&r.error==='not_configured'||code===503)S.pushMsg='The push keys aren’t set up on the server. Add VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY under Supabase → Edge Functions → Secrets.';
+    else if(r&&r.error==='not_found')S.pushMsg='The server doesn’t have this phone’s subscription. Turn reminders off and on again.';
+    else if(code===404)S.pushMsg='The rest-alert function isn’t deployed on Supabase yet.';
+    else if(code===401)S.pushMsg='You’re signed out. Sign in again and retry.';
+    else if(code)S.pushMsg=`The server answered with an error (${code}). Check Supabase → Edge Functions → rest-alert → Logs.`;
+    else S.pushMsg='Couldn’t reach the server. Check your connection and try again.'}
   catch(e){S.pushMsg='Couldn’t send it. Try again.'}
   S.pushBusy=false;render();
 }
