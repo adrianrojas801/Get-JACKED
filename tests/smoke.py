@@ -413,6 +413,13 @@ async def main():
         check(await page.locator("button[data-v=friends].on").count() == 1, "A short sideways swipe does nothing")
         await page.evaluate(hswipe, 150); await page.wait_for_timeout(400)
         check(await page.locator("button[data-v=lifts].on").count() == 1, "Swiping right moves back to Lifts")
+        await page.evaluate("""() => { const el = document.body; const t = (type, x) => new TouchEvent(type, {bubbles: true, cancelable: true,
+            touches: type === 'touchend' ? [] : [new Touch({identifier: 1, target: el, clientX: x, clientY: 600})],
+            changedTouches: [new Touch({identifier: 1, target: el, clientX: x, clientY: 600})]});
+          el.dispatchEvent(t('touchstart', 250)); el.dispatchEvent(t('touchend', 100)); }""")
+        await page.wait_for_timeout(400)
+        check(await page.locator("button[data-v=friends].on").count() == 1, "Swiping in the empty space below the cards also changes section")
+        await page.click("button[data-act=psec][data-v=lifts]"); await page.wait_for_timeout(300)
         check("sets per muscle" in app and "lats" in app, "Lifts shows weekly sets per muscle")
         check(await page.locator("#firststeps").count() == 0, "Someone who has done the basics never sees the checklist")
         await page.click("svg.mfig-xl path[data-mus=lats]"); await page.wait_for_timeout(200)
