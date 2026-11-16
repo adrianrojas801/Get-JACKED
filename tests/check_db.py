@@ -187,6 +187,14 @@ def main():
         check(val("select count(*) from public.push_subs where rest_until is not null", A) == "1"
               and val("select count(*) from public.push_subs where rest_until is not null", B) == "0",
               "Only the owner can set or clear a rest alert time")
+        svc = lambda sql: psql(f"set role service_role; {sql}", ok=False)
+        r = svc("select count(*) from public.push_subs")
+        check(r.returncode == 0 and r.stdout.strip().endswith("1") and svc("update public.push_subs set rest_until = null").returncode == 0
+              and svc("select count(*) from public.docs").returncode == 0,
+              "The server functions can read and update push subscriptions and read docs")
+        check(svc("insert into public.docs (user_id, coll, id, data) values ('" + A + "', 'days', '2026-01-01', '{}')").returncode != 0
+              and svc("select count(*) from public.board").returncode != 0,
+              "The server functions get nothing beyond that")
         psql("delete from public.push_subs", A)
         check(val("select count(*) from public.push_subs") == "0", "A person can remove their own subscription")
     except Exception as e:  # a setup step failed

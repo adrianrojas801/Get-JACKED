@@ -50,7 +50,7 @@ async function handle(req: Request): Promise<Response> {
   const { data: who, error: whoErr } = await admin.auth.getUser(token);
   if (whoErr || !who?.user) { console.error("rest-alert: bad token", whoErr?.message); return json({ error: "unauthorized" }, 401); }
   const { data: owned, error: ownErr } = await admin.from("push_subs").select("endpoint").eq("endpoint", endpoint).eq("user_id", who.user.id).maybeSingle();
-  if (ownErr) { console.error("rest-alert: lookup failed", ownErr.message); return json({ error: "failed" }, 500); }
+  if (ownErr) { console.error("rest-alert: lookup failed", ownErr.message); return json({ error: "failed", detail: ownErr.message }, 500); }
   if (!owned) return json({ error: "not_found" }, 404);
 
   if (test) {
@@ -69,7 +69,7 @@ async function handle(req: Request): Promise<Response> {
   }
   const due = new Date(at).toISOString();
   const { error } = await admin.from("push_subs").update({ rest_until: due }).eq("endpoint", endpoint);
-  if (error) { console.error("rest-alert: could not store the time", error.message); return json({ error: "failed" }, 500); }
+  if (error) { console.error("rest-alert: could not store the time", error.message); return json({ error: "failed", detail: error.message }, 500); }
 
   webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com", pub, priv);
   EdgeRuntime.waitUntil((async () => {
