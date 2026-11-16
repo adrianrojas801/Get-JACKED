@@ -190,6 +190,21 @@ function endSwipe(){
 }
 app.addEventListener('touchend',endSwipe);app.addEventListener('touchcancel',endSwipe);
 
+// ---------- swipe left or right between Body, Lifts and Friends on Progress ----------
+let PS=null;const PSEC=['body','lifts','friends'];
+app.addEventListener('touchstart',e=>{
+  PS=null;if(S.tab!=='progress'||S.sheet||e.touches.length!==1||e.target.closest('input,textarea,select,.sheet'))return;
+  PS={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()};
+},{passive:true});
+app.addEventListener('touchend',e=>{
+  if(!PS||!e.changedTouches.length)return;const s=PS;PS=null;
+  const dx=e.changedTouches[0].clientX-s.x,dy=e.changedTouches[0].clientY-s.y;
+  if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5||Date.now()-s.t>800)return;
+  const i=PSEC.indexOf(PSEC.includes(S.psec)?S.psec:'body')+(dx<0?1:-1);
+  if(i<0||i>=PSEC.length)return;
+  S.psec=PSEC[i];S.showCheckin=false;render();window.scrollTo(0,0);
+},{passive:true});
+
 // ---------- drag to reorder ----------
 let DR=null;
 app.addEventListener('pointerdown',e=>{const h=e.target.closest('.handle');if(!h)return;const li=h.closest('.ritem');if(!li)return;e.preventDefault();DR={li,list:li.parentElement,id:e.pointerId};li.classList.add('dragging');try{h.setPointerCapture(e.pointerId)}catch(x){}});

@@ -401,6 +401,18 @@ async def main():
         await page.click("button[data-act=psec][data-v=lifts]"); await page.wait_for_timeout(300)
         app = (await page.inner_text("#app")).lower()
         check("records" in app and "lifts this week" in app and "125×10" in app, "Lifts shows records and this week's lifts")
+        hswipe = """(dx) => { const el = document.querySelector('.seg'); const mk = (type, x) => new TouchEvent(type, {bubbles: true, cancelable: true,
+            touches: type === 'touchend' ? [] : [new Touch({identifier: 1, target: el, clientX: x, clientY: 200})],
+            changedTouches: [new Touch({identifier: 1, target: el, clientX: x, clientY: 200})]});
+          el.dispatchEvent(mk('touchstart', 200)); el.dispatchEvent(mk('touchmove', 200 + dx / 2)); el.dispatchEvent(mk('touchend', 200 + dx)); }"""
+        await page.evaluate(hswipe, -150); await page.wait_for_timeout(400)
+        check(await page.locator("button[data-v=friends].on").count() == 1, "Swiping left on Progress moves from Lifts to Friends")
+        await page.evaluate(hswipe, -150); await page.wait_for_timeout(300)
+        check(await page.locator("button[data-v=friends].on").count() == 1, "Swiping left on the last section stays put")
+        await page.evaluate(hswipe, 30); await page.wait_for_timeout(300)
+        check(await page.locator("button[data-v=friends].on").count() == 1, "A short sideways swipe does nothing")
+        await page.evaluate(hswipe, 150); await page.wait_for_timeout(400)
+        check(await page.locator("button[data-v=lifts].on").count() == 1, "Swiping right moves back to Lifts")
         check("sets per muscle" in app and "lats" in app, "Lifts shows weekly sets per muscle")
         check(await page.locator("#firststeps").count() == 0, "Someone who has done the basics never sees the checklist")
         await page.click("svg.mfig-xl path[data-mus=lats]"); await page.wait_for_timeout(200)
