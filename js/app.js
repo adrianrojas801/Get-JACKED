@@ -109,6 +109,18 @@ async function pushOff(){
     if(sub){await SB.from('push_subs').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch(e){}
   TM.ep=undefined;S.push={on:false};render();
 }
+// Sends a test notification to this phone through the rest-alert function and says what happened.
+async function pushTest(){
+  if(!S.push||!S.push.on||S.pushBusy)return;S.pushBusy=true;S.pushMsg='';S.pushNote='';render();
+  try{const {data,error}=await SB.functions.invoke('rest-alert',{body:{endpoint:S.push.endpoint,test:true}});
+    if(error||!data)S.pushMsg='Couldn’t reach the server. Check your connection, and that the functions are deployed.';
+    else if(data.ok)S.pushNote='Sent. If nothing shows up in a few seconds, open your phone’s Settings → Notifications → Get Jacked and allow banners.';
+    else if(data.error==='push_failed')S.pushMsg=data.status===404||data.status===410?'This phone’s subscription expired. Turn reminders off and on again.':`The push service refused it (code ${data.status||'none'}). The push keys on the server may not match config.js.`;
+    else if(data.error==='not_configured')S.pushMsg='The push keys aren’t set up on the server yet.';
+    else S.pushMsg='Couldn’t send it. Turn reminders off and on again, then retry.'}
+  catch(e){S.pushMsg='Couldn’t send it. Try again.'}
+  S.pushBusy=false;render();
+}
 async function pushHour(field,h){if(!S.push||!S.push.on)return;S.push[field]=h;try{await SB.from('push_subs').update({[field]:h}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
 function remindersCard(){
   if(!ME.user||!pushReady())return '';
@@ -116,9 +128,10 @@ function remindersCard(){
   const hours=(f,v)=>`<label class="f">${f==='morning'?'Weigh-in nudge':'Workout nudge'}<select data-push="${f}">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===v?'selected':''}>${hourLabel(h)}</option>`).join('')}</select></label>`;
   let h=`<div class="card"><h2>Reminders</h2>`;
   if(S.push.on)h+=`<p class="muted" style="margin-top:0">On for this phone. You get a weigh-in nudge if you haven’t logged your weight, and a workout nudge if it’s a training day and nothing’s logged.</p>
-    <div class="grid2">${hours('morning',S.push.morning)}${hours('evening',S.push.evening)}</div><button class="small" data-act="pushoff" style="margin-top:10px">Turn off</button>`;
+    <div class="grid2">${hours('morning',S.push.morning)}${hours('evening',S.push.evening)}</div><div class="row wrap" style="margin-top:10px"><button class="small" data-act="pushtest">${S.pushBusy?'Sending…':'Send a test'}</button><button class="small" data-act="pushoff">Turn off</button></div>`;
   else h+=`<p class="muted" style="margin-top:0">Get a morning weigh-in nudge and an evening nudge on training days you haven’t logged. On an iPhone this works from the home-screen app.</p><button class="small primary" data-act="pushon">Turn on reminders</button>`;
   if(S.pushMsg)h+=`<div class="err">${esc(S.pushMsg)}</div>`;
+  if(S.pushNote)h+=`<div class="muted" style="margin-top:8px">${esc(S.pushNote)}</div>`;
   return h+`</div>`;
 }
 

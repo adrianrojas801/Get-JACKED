@@ -1,3 +1,6 @@
+// Also answers `{endpoint, test: true}` by pushing a test notification to the caller's own device right away
+// and returning the push service's answer, so a person can see why notifications aren't arriving.
+//
 // Pushes "Rest done" to a phone when the rest timer ends while the app is in the background.
 // The app calls this when you leave it mid-rest, with your push endpoint and the time the timer ends.
 // It answers right away, waits in the background, then sends only if push_subs.rest_until still holds that time.
@@ -18,14 +21,15 @@ Deno.serve(async (req) => {
   const pub = Deno.env.get("VAPID_PUBLIC_KEY"), priv = Deno.env.get("VAPID_PRIVATE_KEY");
   if (!pub || !priv) return Response.json({ error: "not_configured" }, { status: 503 });
 
-  let endpoint = "", at = 0;
+  let endpoint = "", at = 0, test = false;
   try {
     const body = await req.json();
     endpoint = String(body.endpoint ?? "");
     at = Number(body.at);
+    test = body.test === true;
   } catch { return Response.json({ error: "bad_request" }, { status: 400 }); }
   const wait = at - Date.now();
-  if (!endpoint || !Number.isFinite(wait) || wait < 1000 || wait > MAX_WAIT_MS) return Response.json({ error: "bad_request" }, { status: 400 });
+  if (!endpoint || (!test && (!Number.isFinite(wait) || wait < 1000 || wait > MAX_WAIT_MS))) return Response.json({ error: "bad_request" }, { status: 400 });
 
   const url = Deno.env.get("SUPABASE_URL")!;
   // The caller's own client: row security means this only finds the caller's own subscription.
@@ -34,6 +38,20 @@ Deno.serve(async (req) => {
   if (!owned) return Response.json({ error: "not_found" }, { status: 404 });
 
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  if (test) {
+    webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com", pub, priv);
+    const { data: s } = await admin.from("push_subs").select("endpoint,p256dh,auth").eq("endpoint", endpoint).maybeSingle();
+    if (!s) return Response.json({ error: "not_found" }, { status: 404 });
+    try {
+      const r = await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify({ title: "Get Jacked", body: "Test notification. Notifications are working.", url: "/" }));
+      return Response.json({ ok: true, status: r.statusCode });
+    } catch (e) {
+      const code = (e as { statusCode?: number }).statusCode ?? 0;
+      if (code === 404 || code === 410) await admin.from("push_subs").delete().eq("endpoint", endpoint);
+      return Response.json({ error: "push_failed", status: code });
+    }
+  }
   const due = new Date(at).toISOString();
   const { error } = await admin.from("push_subs").update({ rest_until: due }).eq("endpoint", endpoint);
   if (error) return Response.json({ error: "failed" }, { status: 500 });
