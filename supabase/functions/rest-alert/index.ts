@@ -7,7 +7,8 @@
 // Coming back to the app clears rest_until, so nothing is sent while you are looking at the timer.
 //
 // Needs the same secrets as send-reminders: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (and optionally VAPID_SUBJECT).
-// Supabase checks the caller's sign-in token before this runs. Only the caller's own subscription can be armed.
+// Supabase checks the caller's sign-in token before this runs, and the function checks it again to find the caller.
+// Only the caller's own subscription can be armed or tested.
 // A wait is capped at 10 minutes, and Supabase may stop background work sooner (about 2.5 minutes on the free plan).
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3";
@@ -32,12 +33,15 @@ Deno.serve(async (req) => {
   if (!endpoint || (!test && (!Number.isFinite(wait) || wait < 1000 || wait > MAX_WAIT_MS))) return Response.json({ error: "bad_request" }, { status: 400 });
 
   const url = Deno.env.get("SUPABASE_URL")!;
-  // The caller's own client: row security means this only finds the caller's own subscription.
-  const mine = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
-  const { data: owned } = await mine.from("push_subs").select("endpoint").eq("endpoint", endpoint).maybeSingle();
+  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  // Who is calling: check their sign-in token, then only touch a subscription that belongs to them.
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const { data: who, error: whoErr } = await admin.auth.getUser(token);
+  if (whoErr || !who?.user) { console.error("rest-alert: bad token", whoErr?.message); return Response.json({ error: "unauthorized" }, { status: 401 }); }
+  const { data: owned, error: ownErr } = await admin.from("push_subs").select("endpoint").eq("endpoint", endpoint).eq("user_id", who.user.id).maybeSingle();
+  if (ownErr) { console.error("rest-alert: lookup failed", ownErr.message); return Response.json({ error: "failed" }, { status: 500 }); }
   if (!owned) return Response.json({ error: "not_found" }, { status: 404 });
 
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   if (test) {
     webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com", pub, priv);
     const { data: s } = await admin.from("push_subs").select("endpoint,p256dh,auth").eq("endpoint", endpoint).maybeSingle();
@@ -54,7 +58,7 @@ Deno.serve(async (req) => {
   }
   const due = new Date(at).toISOString();
   const { error } = await admin.from("push_subs").update({ rest_until: due }).eq("endpoint", endpoint);
-  if (error) return Response.json({ error: "failed" }, { status: 500 });
+  if (error) { console.error("rest-alert: could not store the time", error.message); return Response.json({ error: "failed" }, { status: 500 }); }
 
   webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com", pub, priv);
   EdgeRuntime.waitUntil((async () => {
