@@ -118,7 +118,7 @@ async function pushTest(){
     if(r&&r.ok)S.pushNote='Sent. If nothing shows up in a few seconds, open your phone’s Settings → Notifications → Get Jacked and allow banners.';
     else if(r&&r.error==='push_failed')S.pushMsg=r.status===404||r.status===410?'This phone’s subscription expired. Turn reminders off and on again.':`The push service refused it (code ${r.status||'none'}). The push keys on the server may not match config.js.`;
     else if(r&&r.error==='not_configured'||code===503)S.pushMsg='The push keys aren’t set up on the server. Add VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY under Supabase → Edge Functions → Secrets.';
-    else if(r&&r.error==='server_error')S.pushMsg='The server hit an error: '+(r.detail||'unknown')+'. If it mentions a key or subject, check the VAPID secrets in Supabase.';
+    else if(r&&(r.error==='server_error'||r.error==='failed'))S.pushMsg='The server hit an error: '+(r.detail||'unknown')+'. If it mentions a key or subject, check the VAPID secrets in Supabase.';
     else if(r&&r.error==='not_found')S.pushMsg='The server doesn’t have this phone’s subscription. Turn reminders off and on again.';
     else if(code===404)S.pushMsg='The rest-alert function isn’t deployed on Supabase yet.';
     else if(code===401)S.pushMsg='You’re signed out. Sign in again and retry.';
