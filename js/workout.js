@@ -104,7 +104,7 @@ function viewWorkout(){
   if(S.wp==='rest')return h+`<div class="card"><h2>Rest day</h2><p>Recovery is when you grow. Get a walk in or hit 8–10k steps, eat your protein, and sleep 7.5+ hours.</p><p class="muted">Want to train anyway? Pick a session above.</p></div>`;
   const w=curWorkout(),id=wid(w.date,w.prog);
   const doneSets=w.ex.reduce((a,e)=>a+e.sets.filter(s=>s.d).length,0),allSets=w.ex.reduce((a,e)=>a+e.sets.length,0);
-  h+=`<div class="row between" style="margin:8px 4px"><div><b>${esc(w.title)}</b><div class="muted">${doneSets}/${allSets} sets${w.done?' · finished ✓':''}</div></div>${S.reorder?'':'<button class="small" data-act="reorder"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M8 4 4.5 7.5M8 4l3.5 3.5M16 20V4M16 20l-3.5-3.5M16 20l3.5-3.5"/></svg>Reorder</button>'}</div>`;
+  h+=`<div class="row between" style="margin:8px 4px"><div><b>${esc(w.title)}</b><div class="muted">${doneSets}/${allSets} sets${w.done?' · finished ✓':''}</div></div>${S.reorder?'':`<div class="row">${wLive(w)?`<button class="small" data-act="wreset">${doneSets||w.done?'Reset':'Undo start'}</button>`:''}<button class="small" data-act="reorder"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M8 4 4.5 7.5M8 4l3.5 3.5M16 20V4M16 20l-3.5-3.5M16 20l3.5-3.5"/></svg>Reorder</button></div>`}</div>`;
   if(S.reorder){
     h+=`<div class="card"><div class="row between"><h2 style="margin:0">Drag ⠿ to match your order</h2><button class="small primary" data-act="reorder">Done</button></div>
       <ul class="list" id="rlist" style="margin-top:6px">${w.ex.map((e,i)=>{const d=e.sets.filter(x=>x.d).length;return `<li class="ritem" data-ri="${i}"><span class="handle" aria-label="drag">⠿</span><div class="grow">${esc(e.n)}<div class="muted">${d}/${e.sets.length} sets</div></div><button class="small" data-act="mv" data-i="${i}" data-v="-1" ${i===0?'disabled':''}>↑</button><button class="small" data-act="mv" data-i="${i}" data-v="1" ${i===w.ex.length-1?'disabled':''}>↓</button></li>`}).join('')}</ul>
@@ -114,8 +114,11 @@ function viewWorkout(){
   h+=`<div style="margin:0 4px">${bar(doneSets,allSets||1)}</div>`;
   h+=sessionFig(w);
   if(w.done)h+=summary(w,id);
-  // One exercise is open at a time; the rest fold to a line. It follows you: the first one with sets left, unless you tap another.
-  const open=S.exOpen!=null&&w.ex[S.exOpen]?S.exOpen:w.ex.findIndex(setsLeft);
+  // Before you start, every exercise stays folded (you can still tap one to open it) and Start workout is the main button.
+  // Once started, one exercise is open at a time and it follows you: the first one with sets left, unless you tap another.
+  const live=wLive(w),pick=S.exOpen!=null&&w.ex[S.exOpen]?S.exOpen:-1;
+  if(!live)h+=`<button class="primary big" data-act="wstart">Start workout</button>`;
+  const open=live&&pick<0?w.ex.findIndex(setsLeft):pick;
   w.ex.forEach((e,i)=>{h+=exCard(w,id,i,i===open)});
   if(S.addEx)h+=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Add exercise</h2><button class="small" data-act="axclose">Cancel</button></div><div class="grid3"><input id="axn" placeholder="Name" style="grid-column:1/4"><input id="axs" type="number" inputmode="numeric" value="3" placeholder="sets"><input id="axr" value="8-12" placeholder="reps (8-12)"><button class="primary" data-act="axadd">Add</button></div></div>`;
   else h+=`<button data-act="axopen" style="width:100%;margin:4px 0">+ Add exercise</button>`;
@@ -132,6 +135,8 @@ function cardioCard(date){
     ${mins>0?`<div class="row between" style="margin-top:10px"><b>Done · ${mins} min ✓</b><button class="small" data-act="cardio">Remove</button></div>`:`<button class="primary" data-act="cardio" style="width:100%;margin-top:10px">Did it · 20 min</button>`}</div>`;
 }
 const setsLeft=e=>e.sets.some(s=>!s.d);
+// A workout is under way once Start workout is tapped (or a set is logged), and stays that way when finished.
+const wLive=w=>!!w&&!!(w.t0||w.done);
 const targetOf=(w,id,e)=>{const last=lastFor(e.n,w.date,id),stall=stallOf(liftHistory(e.n,w.date,id));return {last,stall,tg:targetFor(last,withJump(e,w.prog),stall)}};
 // What a blank set gets logged as: today's target, or the weight you used on the set before if you changed it.
 function setDefault(w,i,j){

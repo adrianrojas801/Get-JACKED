@@ -396,7 +396,7 @@ function submitIntake(){
   delete s.swaps;putSettings(s);
   if(share)sendIntake();
   S.redo=false;S.draft=null;S.wp=null;S.flash=`Your plan is ready: ${fmt(t.cal)} calories and ${t.pro} g protein a day, ${p.days} lifting days a week. Change anything under Plan.`+(share?' Your answers were sent so a custom program can be written for you.':'');
-  S.tab='today';render();window.scrollTo(0,0);
+  S.tab='today';render();glideTop();
 }
 function viewProgramEditor(){
   const P=PROG(),keys=P.order.filter(k=>P.days[k]),opts=[...keys.map(k=>[k,P.days[k].t]),['rest','Rest']];

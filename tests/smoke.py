@@ -335,9 +335,23 @@ async def main():
 
         await page.click("button[data-act=startw]"); await page.wait_for_timeout(300)
         app = await page.inner_text("#app")
+        check(await page.locator("button.exrow").count() == 2 and await page.locator(".exopen").count() == 0
+              and await page.locator("button[data-act=wstart]").count() == 1, "Before you start, every exercise is folded and Start workout shows")
+        await page.click("button[data-act=wstart]"); await page.wait_for_timeout(500)
+        app = await page.inner_text("#app")
         check("no new best in 3 sessions" in app.lower() and "110 × 12, 12, 12" in app, "A stalled lift gets a back-off suggestion and a lighter target")
-        check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1,
-              "One exercise is open, the rest fold to a line with today's target")
+        check("40 × 11, 10, 9" in app and await page.locator("button.exrow").count() == 1 and await page.locator(".exopen").count() == 1
+              and await page.locator("button[data-act=wstart]").count() == 0,
+              "Start opens the first exercise, the rest fold to a line with today's target")
+        await page.click("button[data-act=wreset]"); await page.wait_for_timeout(300)
+        check(await page.locator("button[data-act=wstart]").count() == 1 and await page.locator(".exopen").count() == 0
+              and not (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']")).get("t0"), "Undo start clears the start time and folds everything again")
+        await page.click("button[data-act=wstart]"); await page.wait_for_timeout(300)
+        await page.click("button[data-act=finish]"); await page.wait_for_timeout(300)
+        check(await page.locator("button[data-act=wreset]").count() == 1, "A finished workout can still be reset")
+        await page.click("button[data-act=wreset]"); await page.wait_for_timeout(300)
+        check(await page.locator("button[data-act=wstart]").count() == 1 and "finished" not in (await page.inner_text("#app")).lower(), "Reset reopens a finished workout")
+        await page.click("button[data-act=wstart]"); await page.wait_for_timeout(300)
         await page.click("button.exrow[data-i='1']"); await page.wait_for_timeout(200)
         rep = "input[data-w='1'][data-s='0'][data-f=r]"
         await page.click("button[data-act=step][data-i='1'][data-f=r][data-v='1']")
@@ -376,6 +390,10 @@ async def main():
         check(await page.locator(".seg[role=tablist] button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
               "Progress is split into Body, Lifts and Friends, and opens on Body")
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
+        await page.evaluate("document.body.style.minHeight = '3000px'; window.scrollTo(0, 800)"); await page.wait_for_timeout(200)
+        await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(1200)
+        check(await page.evaluate("scrollY") < 5, "Tapping the tab you're on glides back to the top")
+        await page.evaluate("document.body.style.minHeight = ''")
         png = __import__("base64").b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
         for stamp in ("a", "b"):
             await page.set_input_files("#photofile", {"name": f"{stamp}.png", "mimeType": "image/png", "buffer": png}); await page.wait_for_timeout(500)
