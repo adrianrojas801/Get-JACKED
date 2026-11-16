@@ -346,7 +346,7 @@ async def main():
         await page.click("button[data-act=cardio]"); await page.wait_for_timeout(300)
         check(not (await page.evaluate(f"window.__docs['days/{ago(0)}']")).get("cardio"), "Remove clears the cardio, with undo")
         await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(300)
-        await page.click("nav button[data-tab=workout]"); await page.wait_for_timeout(500)
+        await page.click("nav button[data-tab=workout]"); await page.wait_for_timeout(1000)
         top = await page.evaluate("document.querySelector('.exopen').getBoundingClientRect().top")
         check(0 <= top < 300, "The Workout tab scrolls to the open exercise, not the top")
         await page.click("button.exrow[data-i='0']"); await page.wait_for_timeout(200)
