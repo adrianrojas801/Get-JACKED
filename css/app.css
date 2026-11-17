@@ -106,7 +106,7 @@ label.btn{display:inline-block;border:1px solid var(--line);background:var(--chi
 .sheethead{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 0 10px;background:var(--bg)}
 .sheethead h2{font-family:var(--display);font-size:24px;font-weight:800;text-transform:uppercase;letter-spacing:.025em;margin:0;line-height:1}
 .sheet h3{font-size:11.5px;margin:18px 0 8px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.1em}
-body{--navpad:max(24px,env(safe-area-inset-bottom))}body.kb{--navpad:8px}
+body{--navpad:max(24px,env(safe-area-inset-bottom))}
 body.sheeton{overflow:hidden}body.sheeton #timer{display:none}
 .list{list-style:none;margin:0;padding:0}
 .list li{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
@@ -123,12 +123,14 @@ body.sheeton{overflow:hidden}body.sheeton #timer{display:none}
 .kpi{background:var(--field);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .kpi b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
 .kpi span{font-size:12px;color:var(--muted)}
-nav{transition:bottom .18s ease-out,padding .18s ease-out;position:fixed;left:0;right:0;display:flex;gap:4px;padding:6px 10px var(--navpad);bottom:var(--kb,0px);background:var(--glass);-webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px);border-top:1px solid var(--line);z-index:5}
+nav{position:fixed;left:0;right:0;display:flex;gap:4px;padding:6px 10px var(--navpad);bottom:0;background:var(--glass);-webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px);border-top:1px solid var(--line);z-index:5}
 nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none;border-radius:12px;padding:7px 0 6px;font-size:11.5px;font-weight:600;color:var(--muted);box-shadow:none}
 nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--accent);background:var(--accent-soft)}
-#timer{transition:bottom .18s ease-out;position:fixed;left:10px;right:10px;bottom:calc(var(--kb,0px) + 66px + var(--navpad));background:var(--text);color:var(--bg);border-radius:var(--r);padding:10px 12px 10px 16px;display:none;align-items:center;gap:8px;z-index:6;max-width:620px;margin:0 auto;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+#timer{transition:bottom .18s ease-out;position:fixed;left:10px;right:10px;bottom:calc(66px + var(--navpad));background:var(--text);color:var(--bg);border-radius:var(--r);padding:10px 12px 10px 16px;display:none;align-items:center;gap:8px;z-index:6;max-width:620px;margin:0 auto;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 #timer.show{display:flex;animation:rise .25s var(--ease)}
+/* With the keyboard open the tab bar stays behind it and only the timer rides on top. */
+body.kb #timer{bottom:calc(var(--kb,0px) + 10px)}
 #timer b{font-size:24px;font-variant-numeric:tabular-nums;flex:1;letter-spacing:-.01em}
 #timer button{background:transparent;color:var(--bg);border-color:var(--muted)}
 #timer.over{background:var(--good);color:var(--card)}

@@ -208,9 +208,9 @@ async function start(){
 }
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
 render();
-// Keep the timer and tab bar on top of the keyboard. iOS doesn't resize the page for it, so measure the gap and set --kb.
+// Keep the rest timer on top of the keyboard (the tab bar stays behind it). iOS doesn't resize the page for it, so measure the gap and set --kb.
 {const vv=window.visualViewport;if(vv){let raf=0;
-  // Only count the keyboard while a text field has focus. iOS can leave a stale value behind after it closes, which parked the bars mid-screen.
+  // Only count the keyboard while a text field has focus. iOS can leave a stale value behind after it closes, which parked the timer mid-screen.
   const kb=()=>{raf=0;const a=document.activeElement,typing=!!a&&(a.tagName==='TEXTAREA'||a.tagName==='INPUT'&&!/^(checkbox|radio|button|submit|file|range)$/.test(a.type));
     let h=typing?Math.round(innerHeight-vv.height-vv.offsetTop):0;if(h<80)h=0;
     document.documentElement.style.setProperty('--kb',h+'px');document.body.classList.toggle('kb',h>0)};
