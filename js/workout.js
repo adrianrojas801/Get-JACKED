@@ -93,7 +93,7 @@ function sessionFig(w){
 }
 
 function viewWorkout(){
-  if(!S.wp)S.wp=schedOn(S.wd);
+  if(!S.wp)S.wp=wpFor(S.wd);
   const P=PROG(),lbl=k=>{const dn=P.sched.map((x,i)=>x===k?DAYNAMES[i]:null).filter(Boolean);return P.days[k].t+(dn.length?` (${dn.join(', ')})`:'')};
   const opts=[...P.order.filter(k=>P.days[k]).map(k=>[k,lbl(k)]),['rest','Rest day']];
   if(S.wp!=='rest'&&!P.days[S.wp]){const lw=S.workouts[wid(S.wd,S.wp)];if(lw)opts.unshift([S.wp,lw.title||'Logged workout']);else S.wp='rest'}

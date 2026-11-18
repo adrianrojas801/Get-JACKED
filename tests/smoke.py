@@ -113,6 +113,8 @@ async def main():
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)
         check("Mom" not in await page.inner_text("#app") and "Pozole" not in await page.inner_text("#app"),
               "Plan tab has none of Pablo's personal notes")
+        await page.click("tr.tdy select", timeout=3000)
+        check(True, "Today's row in the weekly split can be tapped")
         await page.click("details.pday summary")
         await page.fill("input[data-pd=upA][data-pe='0'][data-pf=n]", "DB bench press")
         await page.select_option("select[data-sched='3']", "loB"); await page.wait_for_timeout(1000)
@@ -126,6 +128,12 @@ async def main():
         await page.click("nav button[data-tab=workout]"); await page.wait_for_timeout(200)
         await page.select_option("#wprog", "upA"); await page.wait_for_timeout(200)
         check("db bench press" in (await page.inner_text("#app")).lower(), "Workout uses the edited program")
+        await page.evaluate("S.wp = null; render()"); await page.wait_for_timeout(200)
+        check(await page.input_value("#wprog") == "upA", "The session picked for the day is still there when you come back")
+        await page.evaluate("S.wd = '2000-01-05'; S.wp = wpFor(S.wd); render()"); await page.wait_for_timeout(200)
+        check(await page.input_value("#wprog") != "upA" or await page.evaluate("schedOn('2000-01-05')") == "upA",
+              "Another day is not affected by the pick")
+        await page.evaluate("S.wd = today(); S.wp = wpFor(S.wd); render()"); await page.wait_for_timeout(200)
 
         await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(200)
         check("Copy all data" not in await page.inner_text("#app") and "Sign out" not in await page.inner_text("#app"),

@@ -40,8 +40,8 @@ app.addEventListener('change',e=>{
   if(ds.push){pushHour(ds.push,+el.value);return}
   if(ds.pushn){pushToggle(ds.pushn,el.checked);return}
   if(el.id==='acboard'){setSharing(el.checked);return}
-  if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=schedOn(S.wd);S.swap=null;S.exOpen=null;render()}}
-  else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;S.swap=null;S.exOpen=null;render()}
+  if(el.id==='wdate'){if(el.value){S.reorder=false;S.wd=el.value;S.wp=wpFor(S.wd);S.swap=null;S.exOpen=null;render()}}
+  else if(el.id==='wprog'){S.reorder=false;S.wp=el.value;wpSave(S.wd,S.wp);S.swap=null;S.exOpen=null;render()}
   else if(el.id==='liftsel'){S.lift=el.value;render()}
   else if(el.id==='goalsel'){const s=clone(cfg());s.profile=Object.assign({},s.profile,{goal:el.value});s.phaseStart=today();putSettings(s);render()}
   else if(ds.set){const s=clone(cfg());s[ds.set]=ds.set==='block'?(el.value||null):num(el.value);putSettings(s);render()}
@@ -52,7 +52,7 @@ app.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||!b.dataset.act)return;const ds=b.dataset,act=ds.act,i=+ds.i;
   if(act==='day'){S.dk=addDays(S.dk,+ds.v);if(S.dk>today())S.dk=today();render()}
   else if(act==='gotoday'){S.dk=today();render()}
-  else if(act==='startw'){S.wd=S.dk;S.wp=schedOn(S.dk);S.exOpen=null;S.tab='workout';render();glideTop()}
+  else if(act==='startw'){S.wd=S.dk;S.wp=wpFor(S.dk);S.exOpen=null;S.tab='workout';render();glideTop()}
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
   else if(act==='foods'){S.sheet='foods';S.qedit=false;render();probeEstimates()}
   else if(act==='sheetx'){S.sheet=null;S.qedit=false;render()}
