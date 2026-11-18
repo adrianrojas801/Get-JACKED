@@ -18,7 +18,7 @@ const LEGACY_PROGRAM={
  pull:{t:'Pull',ex:[
   {n:'Pull-up',s:3,r:'6-10',rest:150,note:'Overhand, shoulder width, slow with a full stretch. Leave weight blank for bodyweight. Once you hit 10 on all 3 sets, hold a dumbbell between your feet.'},
   {n:'Smith bent-over row',s:3,r:'8-10',rest:150,note:'Warm up 35s × 10 first (don’t log it). Log total: 45s a side = 115.'},
-  {n:'Lat pulldown',s:3,r:'6-10',rest:120,note:'Once you hit 10 on all 3 sets, go up a plate.'},
+  {n:'Lat pulldown',s:3,r:'6-10',rest:120,note:'Once you hit 10 on all 3 sets, go up 15 lbs (one pin hole).'},
   {n:'Single-arm seated row',s:3,r:'10-12',rest:90,note:'Log weight per arm.'},
   {n:'Face pull',s:3,r:'12-20',rest:90,note:'Rear delts. Moved here from Sunday.'},
   {n:'Standing DB curl',s:3,r:'7-10',rest:90,note:'Alternating arms. Warm up with 30s first (don’t log it). Log per dumbbell.'},
@@ -105,8 +105,18 @@ const foodGroups=()=>Array.isArray(cfg().foodGroups)?cfg().foodGroups:NEW_GROUPS
 
 // Someone with history but no program is Pablo from before programs were per-person: move his setup in once.
 // Someone with no history and no program is new: they get the intake form.
+// A saved program keeps its own copy of each note, so reworded notes in the code above have to be applied to it once.
+const NOTE_FIXES={'Once you hit 10 on all 3 sets, go up a plate.':'Once you hit 10 on all 3 sets, go up 15 lbs (one pin hole).'};
+function fixOldNotes(){
+  const pr=cfg().program;if(!pr||!pr.days)return;let hit=false;
+  for(const d of Object.values(pr.days))for(const e of d.ex||[])if(e.note&&NOTE_FIXES[e.note])hit=true;
+  if(!hit)return;
+  const s=clone(cfg());for(const d of Object.values(s.program.days))for(const e of d.ex||[])if(e.note&&NOTE_FIXES[e.note])e.note=NOTE_FIXES[e.note];
+  putSettings(s);
+}
 function ensureProgram(){
-  if(!S.loaded||cfg().program)return;
+  if(!S.loaded)return;
+  if(cfg().program){fixOldNotes();return}
   const hasHistory=Object.keys(S.days).length>0||Object.keys(S.workouts).length>0||cfg().cal!=null;
   if(!hasHistory)return;
   const sw=cfg().swaps||{},days={};

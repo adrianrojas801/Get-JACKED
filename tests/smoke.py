@@ -251,7 +251,8 @@ async def main():
         sunday = ago((today.weekday() + 1) % 7)
         lift = lambda w, r: {"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90, "ti": 0, "sets": [{"w": w, "r": r, "d": True}] * 3}
         seed = {"settings/main": {"cal": 2400, "pro": 150, "goal": 170, "program": {
-                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90},
+                    "days": {"a": {"t": "Back day", "ex": [{"n": "Lat pulldown", "s": 3, "r": "8-12", "rest": 90,
+                                                            "note": "Once you hit 10 on all 3 sets, go up a plate."},
                                                            {"n": "Cable curl", "s": 3, "r": "10-12", "rest": 60}]}},
                     "order": ["a"], "sched": ["a"] * 7}},
                 f"days/{ago(1)}": {"date": ago(1), "food": [{"n": "Burrito", "c": 700, "p": 40, "q": 1}], "steps": 9000}}
@@ -274,6 +275,10 @@ async def main():
               and "workouts this week" in app, "Today shows the three rings and the week strip")
         check("week check-in" in app and "1 of 7 workouts" in app and "stalled: lat pulldown" in app,
               "Today opens with last week's check-in")
+        await page.click("nav button[data-tab=plan]"); await page.wait_for_timeout(1200)
+        check("go up 15 lbs" in (await settings(page))["program"]["days"]["a"]["ex"][0]["note"],
+              "An old saved note is reworded once in the saved program")
+        await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(300)
         await page.click("button[data-act=checkok]"); await page.wait_for_timeout(300)
         check("week check-in" not in (await page.inner_text("#app")).lower() and (await settings(page)).get("checkin") == sunday,
               "Got it puts the check-in away until next week")
