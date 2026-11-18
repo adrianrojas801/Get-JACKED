@@ -96,6 +96,9 @@ const PROG=()=>{const p=cfg().program;return p&&p.days&&Array.isArray(p.order)&&
 const dayOf=k=>PROG().days[k]||null;
 const titleOf=k=>k==='rest'?'Rest day':(dayOf(k)?dayOf(k).t:'Workout');
 const schedOn=dateKey=>{const k=PROG().sched[parseKey(dateKey).getDay()];return k&&dayOf(k)?k:'rest'};
+// The session picked on the Workout tab for a day sticks for that day (kept on this phone, last 14 days). Without a pick, the schedule decides.
+function wpFor(d){const p=(LS.get(lsKey('wp'))||{})[d];return p&&(p==='rest'||dayOf(p))?p:schedOn(d)}
+function wpSave(d,p){const m=Object.assign({},LS.get(lsKey('wp')));if(p===schedOn(d))delete m[d];else m[d]=p;const ks=Object.keys(m).sort();while(ks.length>14)delete m[ks.shift()];LS.set(lsKey('wp'),m)}
 const isLegacy=()=>!!cfg().legacy;
 const goalOf=()=>(cfg().profile&&cfg().profile.goal)||'bulk';
 const foodGroups=()=>Array.isArray(cfg().foodGroups)?cfg().foodGroups:NEW_GROUPS;
