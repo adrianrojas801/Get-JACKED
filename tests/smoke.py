@@ -142,8 +142,8 @@ async def main():
         app = await page.inner_text("#app")
         check((await page.inner_text("#me")).upper() == "P" and "Sign out" in app and "Copy all data" in app,
               "Header button opens Account & data (account, backup)")
-        check((await page.inner_text("#htitle")).lower() == "pablo" and await page.is_visible("#hhi") and (await page.inner_text("#hhi")) == "Hello",
-              "The header greets you by name")
+        check((await page.inner_text("#htitle")).lower() == "pablo!" and await page.is_visible("#hhi") and (await page.inner_text("#hhi")).rstrip(",") in ("Hi", "Good day", "Howdy", "Greetings", "Salutations", "Wassup wit it", "Get working", "You got this"),
+              "The header greets you with one of the greetings and your name")
         await page.evaluate("S.push = {on: true, endpoint: 'https://push.example.com/abcdefghij', morning: 8, evening: 18, notify_weigh: true, notify_train: true, notify_rest: true}; render()")
         await page.click("button[data-act=pushtest]"); await page.wait_for_timeout(300)
         check("sent. if nothing" in (await page.inner_text("#app")).lower(), "Send a test notification reports the result")
