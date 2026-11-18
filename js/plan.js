@@ -194,7 +194,7 @@ function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
 // The header greets the person by name once it's known. Until then (and when signed out) it says Get Jacked.
-function greet(){const t=$('#htitle'),h=$('#hhi');if(!t||!h)return;const nm=((ME.profile&&ME.profile.display_name)||'').trim();h.hidden=!nm;t.textContent=nm||'Get Jacked'}
+function greet(){const t=$('#htitle');if(!t)return;const nm=((ME.profile&&ME.profile.display_name)||'').trim();t.textContent=nm?'Hi, '+nm+'!':'Get Jacked'}
 function meBadge(){const b=$('#me');if(!b)return;greet();const n=((ME.profile&&ME.profile.display_name)||(ME.user&&ME.user.email)||'').trim();b.textContent=n?n[0]:'?';b.classList.toggle('on',S.tab==='account')}
 function toggleAccount(){if(S.tab==='account'){S.tab=S.prevTab||'today'}else{S.prevTab=S.tab==='account'?'today':S.tab;S.tab='account';S.reqs=null;S.reqMsg=null;S.stepLink=undefined;S.push=undefined}S.swap=null;S.redo=false;render();window.scrollTo(0,0)}
 $('#me').addEventListener('click',toggleAccount);
