@@ -71,7 +71,7 @@ function stepsCard(){
      <li>Under Headers, add <code>apikey</code> with the key below.</li>
      <li>Set Request Body to <b>JSON</b> and add three fields: <code>p_token</code> (Text, the token below), <code>p_steps</code> (Number, the Statistics result) and <code>p_date</code> (Text, the Formatted Date).</li>
      <li>Tap ▶. If it works, you see <b>ok</b> and your steps show up on Today within a few seconds.</li>
-     <li>Open the <b>Automation</b> tab and add <b>Time of Day</b> (9:00 PM, daily, <b>Run Immediately</b>) that runs “Send steps”.</li>
+     <li>Open the <b>Automation</b> tab, tap <b>+</b>, choose <b>App</b>, and pick an app you open every day, ideally one you use before bed. Set it to <b>Is Opened</b>, choose <b>Run Immediately</b>, and have it run “Send steps”. Don’t use Time of Day: your iPhone can’t read Health while it’s locked, so a timed run can send nothing. Each time you open that app it sends your steps so far, and the last one of the day is what counts.</li>
     </ol>${copyRow('URL',CFG.url+'/rest/v1/rpc/log_steps')}${copyRow('apikey header',CFG.key)}${copyRow('p_token',S.stepTok)}
     <div class="row" style="margin-top:10px"><button class="small" data-act="stepdone">Done</button></div>`;
   else if(S.stepLink)h+=`<p class="muted" style="margin-top:0">Automatic steps are on. ${S.stepLink.last_used?'Last received '+new Date(S.stepLink.last_used).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'.':'Nothing received yet.'}</p>
