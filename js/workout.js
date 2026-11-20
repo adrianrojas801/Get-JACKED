@@ -146,6 +146,8 @@ function setDefault(w,i,j){
 // Which exercise to open after finishing a set: the superset partner, else stay until it's done, else the next one with sets left.
 // A superset can be switched off for the day (w.ssOff holds the group letters that are off). The exercises then run one after another.
 const ssOn=(w,e)=>!!e.ss&&!(w.ssOff||[]).includes(e.ss);
+// Rests inside a superset can be short. With the superset off, an exercise stands alone, so it rests at least 2:00.
+const restOf=(w,e)=>{const r=e.rest||90;return e.ss&&!ssOn(w,e)?Math.max(r,120):r};
 function nextOpen(w,i){
   const ex=w.ex[i],n=w.ex.length;
   if(ssOn(w,ex))for(let k=1;k<n;k++){const j=(i+k)%n;if(w.ex[j].ss===ex.ss&&setsLeft(w.ex[j]))return j}
@@ -157,7 +159,7 @@ function exCard(w,id,i,open){
   if(!open)return `<button class="card exrow ${done===e.sets.length?'exdone':''}" data-act="exopen" data-i="${i}"><span class="grow"><b>${tag}${esc(e.n)}</b><span class="muted">${done===e.sets.length?setsDone(e).map(s=>`${num(s.w)||'BW'}×${s.r}`).join(' · '):tg?'Today: '+targetText(tg):`${e.sets.length} × ${esc(e.r)}`}</span></span><span class="excount">${done}/${e.sets.length}${done===e.sets.length?' ✓':''}</span></button>`;
   const now=e.sets.findIndex(s=>!s.d),inp=(j,f,s,cls='')=>{const t=tg&&tg[j];return `<input class="${cls}" type="number" inputmode="${f==='w'?'decimal':'numeric'}" ${f==='w'?'step="2.5"':''} data-w="${i}" data-s="${j}" data-f="${f}" value="${s[f]}" placeholder="${f==='w'?(t?(t.w||'BW'):'lbs'):(t?t.r:'reps')}" aria-label="Set ${j+1} ${f==='w'?'weight':'reps'}">`};
   const stepper=(j,f,s,unit,by)=>`<div class="stp"><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="-${by}" aria-label="${by} less">−</button><label>${inp(j,f,s)}<span>${unit}</span></label><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="${by}" aria-label="${by} more">+</button></div>`;
-  let h=`<div class="card exopen ${done===e.sets.length?'exdone':''}"><div class="row between"><div class="grow"><b>${tag}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(e.rest/60)}:${pad(e.rest%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
+  let h=`<div class="card exopen ${done===e.sets.length?'exdone':''}"><div class="row between"><div class="grow"><b>${tag}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(restOf(w,e)/60)}:${pad(restOf(w,e)%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
   {const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];const nt=(te&&te.n===e.n)?(te.note||''):e.note;if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`}
   if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
   h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b></div>`:''}<div class="setlist">`;
@@ -165,7 +167,7 @@ function exCard(w,id,i,open){
     // The set you're on gets big − / + controls and a wide Done button. The others stay as compact rows you can still edit.
     if(j===now)h+=`<div class="setnow"><div class="setlabel">Set ${j+1} of ${e.sets.length}</div><div class="stps">${stepper(j,'w',s,'lbs',5)}${stepper(j,'r',s,'reps',1)}</div><button class="primary big" data-act="setdone" data-i="${i}" data-j="${j}">Done</button></div>`;
     else h+=`<div class="setrow ${s.d?'isdone':''}"><span>${j+1}</span>${inp(j,'w',s)}${inp(j,'r',s)}<button data-act="setdone" data-i="${i}" data-j="${j}">${s.d?'✓':'Done'}</button></div>`});
-  return h+`</div><div class="row" style="margin-top:8px"><button class="small" data-act="setadd" data-i="${i}">+ Set</button><button class="small" data-act="setdel" data-i="${i}">− Set</button><button class="small" data-act="rest" data-v="${e.rest}">Rest timer</button></div></div>`;
+  return h+`</div><div class="row" style="margin-top:8px"><button class="small" data-act="setadd" data-i="${i}">+ Set</button><button class="small" data-act="setdel" data-i="${i}">− Set</button><button class="small" data-act="rest" data-v="${restOf(w,e)}">Rest timer</button></div></div>`;
 }
 // True when this exercise entry beats every earlier session of the same lift (same kind: weighted or bodyweight).
 function isBest(b,name,date,id){const prev=bestOf(liftHistory(name,date,id).filter(x=>x.bw===b.bw));return !!prev&&b.v>prev.v+0.01}

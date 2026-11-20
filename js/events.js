@@ -106,7 +106,7 @@ app.addEventListener('click',e=>{
       const b=bestSet({sets:[s]}),before=bestSet({sets:ex.sets.filter(x=>x!==s)});
       const pr=b&&(!before||before.bw!==b.bw||b.v>before.v)&&isBest(b,ex.n,w.date,wid(w.date,w.prog));
       const nx=nextOpen(w,i);S.exOpen=nx;
-      putWorkout(w);render();startTimer(ex.rest||90);
+      putWorkout(w);render();startTimer(restOf(w,ex));
       if(nx!==i){const c=$('.exopen');if(c)c.scrollIntoView({block:'start',behavior:'smooth'})}
       if(pr){toast(`New best: ${ex.n} ${b.top}`);try{navigator.vibrate&&navigator.vibrate([60,40,120])}catch(x){}}}
     else{s.d=false;putWorkout(w);render()}}
