@@ -144,14 +144,16 @@ function setDefault(w,i,j){
   return {w:pw!=null?pw:(t&&t.w?t.w:''),r:t?t.r:(prev&&prev.d?num(prev.r):'')};
 }
 // Which exercise to open after finishing a set: the superset partner, else stay until it's done, else the next one with sets left.
+// A superset can be switched off for the day (w.ssOff holds the group letters that are off). The exercises then run one after another.
+const ssOn=(w,e)=>!!e.ss&&!(w.ssOff||[]).includes(e.ss);
 function nextOpen(w,i){
   const ex=w.ex[i],n=w.ex.length;
-  if(ex.ss)for(let k=1;k<n;k++){const j=(i+k)%n;if(w.ex[j].ss===ex.ss&&setsLeft(w.ex[j]))return j}
+  if(ssOn(w,ex))for(let k=1;k<n;k++){const j=(i+k)%n;if(w.ex[j].ss===ex.ss&&setsLeft(w.ex[j]))return j}
   if(setsLeft(ex))return i;
   const after=w.ex.findIndex((e,k)=>k>i&&setsLeft(e));return after>=0?after:w.ex.findIndex(setsLeft);
 }
 function exCard(w,id,i,open){
-  const e=w.ex[i],{last,stall,tg}=targetOf(w,id,e),done=e.sets.filter(s=>s.d).length,tag=e.ss?`<span class="tag">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:'';
+  const e=w.ex[i],{last,stall,tg}=targetOf(w,id,e),done=e.sets.filter(s=>s.d).length,tag=e.ss?`<span class="tag ${ssOn(w,e)?'':'off'}" data-act="sstoggle" data-i="${i}" role="button" aria-label="${ssOn(w,e)?'Turn off':'Turn on'} the superset for today">${esc(e.ss)}${w.ex.filter((x,j)=>x.ss===e.ss&&j<=i).length}</span>`:'';
   if(!open)return `<button class="card exrow ${done===e.sets.length?'exdone':''}" data-act="exopen" data-i="${i}"><span class="grow"><b>${tag}${esc(e.n)}</b><span class="muted">${done===e.sets.length?setsDone(e).map(s=>`${num(s.w)||'BW'}×${s.r}`).join(' · '):tg?'Today: '+targetText(tg):`${e.sets.length} × ${esc(e.r)}`}</span></span><span class="excount">${done}/${e.sets.length}${done===e.sets.length?' ✓':''}</span></button>`;
   const now=e.sets.findIndex(s=>!s.d),inp=(j,f,s,cls='')=>{const t=tg&&tg[j];return `<input class="${cls}" type="number" inputmode="${f==='w'?'decimal':'numeric'}" ${f==='w'?'step="2.5"':''} data-w="${i}" data-s="${j}" data-f="${f}" value="${s[f]}" placeholder="${f==='w'?(t?(t.w||'BW'):'lbs'):(t?t.r:'reps')}" aria-label="Set ${j+1} ${f==='w'?'weight':'reps'}">`};
   const stepper=(j,f,s,unit,by)=>`<div class="stp"><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="-${by}" aria-label="${by} less">−</button><label>${inp(j,f,s)}<span>${unit}</span></label><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="${by}" aria-label="${by} more">+</button></div>`;

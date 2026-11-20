@@ -49,6 +49,10 @@ app.addEventListener('change',e=>{
 });
 app.addEventListener('click',e=>{
   {const m=e.target.closest('[data-mus]');if(m){S.mus=S.mus===m.dataset.mus?null:m.dataset.mus;render();return}}
+  // The superset badge on an exercise turns that superset off (or back on) for the day. It sits inside a button, so it is a span.
+  {const t=e.target.closest('.tag[data-act=sstoggle]');if(t){const before=clone(curWorkout()),w=curWorkout(),g=(w.ex[+t.dataset.i]||{}).ss;if(!g)return;
+    const off=(w.ssOff||[]).includes(g);w.ssOff=off?w.ssOff.filter(x=>x!==g):[...(w.ssOff||[]),g];putWorkout(w);render();
+    toast(off?`Superset ${g} back on`:`Superset ${g} off for today`,()=>putWorkout(before));return}}
   const b=e.target.closest('button');if(!b||!b.dataset.act)return;const ds=b.dataset,act=ds.act,i=+ds.i;
   if(act==='day'){S.dk=addDays(S.dk,+ds.v);if(S.dk>today())S.dk=today();render()}
   else if(act==='gotoday'){S.dk=today();render()}
