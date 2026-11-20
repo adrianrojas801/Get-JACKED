@@ -20,7 +20,7 @@ self.addEventListener('push', e => {
   let msg = {};
   try { msg = e.data ? e.data.json() : {}; } catch (err) { /* not JSON: fall back to the default text */ }
   e.waitUntil(self.registration.showNotification(msg.title || 'Get Jacked', {
-    body: msg.body || '', icon: 'icons/icon-192.png?v=2', badge: 'icons/icon-192.png?v=2', data: { url: msg.url || './' },
+    body: msg.body || '', icon: 'icons/icon-192.png?v=2', badge: 'icons/icon-192.png?v=2', data: { url: msg.url || './' }, ...(msg.tag ? { tag: msg.tag } : {}),
   }));
 });
 self.addEventListener('notificationclick', e => {
