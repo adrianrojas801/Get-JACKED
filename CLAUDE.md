@@ -126,7 +126,7 @@ Local preview: `python3 -m http.server 8000` from the repo root.
 
 - **Progression (double progression):** when the last session hit the top of the rep range on every set, add the exercise's jump and start again at the bottom of the range. Otherwise, the same weight plus one rep on the first set that isn't at the top. Log working sets only, not warm-ups.
 - **Effort:** most sets 0–2 reps short of failure. Isolation exercises can go to failure, and a drop set on the last set of an isolation exercise is fine. Heavy Smith lifts stay 1–2 reps short of failure.
-- **Rest:** 2–3 minutes on compounds, at least 90 seconds on isolation. Rests inside a superset can be shorter.
+- **Rest:** 2–3 minutes on compounds, at least 90 seconds on isolation. Rests inside a superset can be shorter. A superset turned off for the day (tap its badge) makes each exercise rest at least 2:00.
 - **No scheduled deloads.** Suggest an easier week only after a stall of 2+ weeks or when the person feels beat up. A stall is 3+ sessions and 2+ weeks without beating the lift's best (`stallOf`); the suggestion is about 10% off, then build back up.
 - **Goals** (from the intake, `settings.profile.goal`). Suggest calorie changes in ±150 steps for all of them.
   - **Lean bulk:** aim for 0.25–0.5 lb a week on the 7-day weight average. Track waist growth against weight gain. (The owner's protein target is about 160 g.)
