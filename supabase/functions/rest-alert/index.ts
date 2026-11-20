@@ -77,12 +77,16 @@ async function handle(req: Request): Promise<Response> {
   EdgeRuntime.waitUntil((async () => {
     await new Promise((r) => setTimeout(r, wait));
     const { data: s } = await admin.from("push_subs").select("endpoint,p256dh,auth,rest_until").eq("endpoint", endpoint).maybeSingle();
-    // Skip if the person came back (cleared), the timer was changed (a newer time), or the device was removed.
-    if (!s?.rest_until || Math.abs(Date.parse(s.rest_until) - at) > 1500) return;
-    await admin.from("push_subs").update({ rest_until: null }).eq("endpoint", endpoint);
+    // Skip if the device was removed.
+    if (!s) return;
+    // Claim the alert in one step: clear rest_until only if it still holds this exact time.
+    // If the person came back (cleared) or changed the timer, nothing matches. If the app armed the same
+    // time several times, every waiter reaches this line but only one gets the row, so only one sends.
+    const { data: claimed } = await admin.from("push_subs").update({ rest_until: null }).eq("endpoint", endpoint).eq("rest_until", due).select("endpoint");
+    if (!claimed?.length) return;
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        JSON.stringify({ title: "Rest done", body: "Time for your next set.", url: "/" }));
+        JSON.stringify({ title: "Rest done", body: "Time for your next set.", url: "/", tag: "rest" }));
     } catch (e) {
       const code = (e as { statusCode?: number }).statusCode;
       if (code === 404 || code === 410) await admin.from("push_subs").delete().eq("endpoint", endpoint);
