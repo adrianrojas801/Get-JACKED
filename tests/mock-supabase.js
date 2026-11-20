@@ -37,6 +37,7 @@ window.supabase={createClient(){
         if(mode==='upsert'){for(const r of payload){const i=__board.findIndex(x=>x.user_id===r.user_id&&x.week===r.week);if(i<0)__board.push(r);else __board[i]=r}persist();return {error:null}}
         if(mode==='delete'){__board=__board.filter(x=>x.user_id!==f.user_id);persist();return {error:null}}
         return {data:JSON.parse(JSON.stringify(__board)),error:null}}
+      if(table==='push_subs')return {data:null,error:null};
       if(table==='step_tokens'){
         if(mode==='delete'){__steptok=null;persist();return {error:null}}
         return {data:__steptok,error:null}}
