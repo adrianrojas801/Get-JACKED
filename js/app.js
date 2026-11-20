@@ -91,23 +91,47 @@ async function loadPush(){
   try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
     if(!sub){S.push={on:false};return softRender()}
     const {data}=await SB.from('push_subs').select('morning,evening,notify_weigh,notify_train,notify_rest').eq('endpoint',sub.endpoint).maybeSingle();
-    S.push=data?{on:true,endpoint:sub.endpoint,morning:data.morning,evening:data.evening,notify_weigh:data.notify_weigh!==false,notify_train:data.notify_train!==false,notify_rest:data.notify_rest!==false}:{on:false}}
+    S.push=data?{on:true,endpoint:sub.endpoint,morning:data.morning,evening:data.evening,notify_weigh:data.notify_weigh!==false,notify_train:data.notify_train!==false,notify_rest:data.notify_rest!==false}:{on:false};pushKeep()}
   catch(e){S.push={on:false}}
   if(S.tab==='account')softRender();
 }
+// Subscribes this phone and saves it with the given settings. The phone must already allow notifications.
+async function pushRegister(st){
+  const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(CFG.vapidPublicKey)}),j=sub.toJSON();
+  const row=Object.assign({endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,tz:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago'},st);
+  const {error}=await SB.from('push_subs').upsert(row,{onConflict:'endpoint'});if(error)throw error;
+  return row;
+}
+const PUSH_DEF={morning:8,evening:18,notify_weigh:true,notify_train:true,notify_rest:true};
+const pushPick=r=>({morning:r.morning,evening:r.evening,notify_weigh:r.notify_weigh!==false,notify_train:r.notify_train!==false,notify_rest:r.notify_rest!==false});
+// Remember that reminders are on, and how, so the app can set them up again if the phone or server drops them.
+const pushKeep=()=>{if(S.push&&S.push.on)LS.set(lsKey('pushwant'),pushPick(S.push))};
 async function pushOn(){
   try{if(await Notification.requestPermission()!=='granted'){S.pushMsg='Notifications are blocked for this app. Allow them in your phone’s settings, then try again.';return render()}
-    const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(CFG.vapidPublicKey)}),j=sub.toJSON();
-    const row={endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,tz:Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago',morning:8,evening:18};
-    const {error}=await SB.from('push_subs').upsert(row,{onConflict:'endpoint'});if(error)throw error;
-    S.pushMsg='';TM.ep=undefined;S.push={on:true,endpoint:row.endpoint,morning:8,evening:18,notify_weigh:true,notify_train:true,notify_rest:true}}
+    const row=await pushRegister(PUSH_DEF);
+    S.pushMsg='';TM.ep=undefined;S.push=Object.assign({on:true,endpoint:row.endpoint},PUSH_DEF);pushKeep()}
   catch(e){S.pushMsg='Couldn’t turn reminders on. On an iPhone, add the app to your home screen first and open it from there.'}
   render();
 }
 async function pushOff(){
+  LS.del(lsKey('pushwant'));
   try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
     if(sub){await SB.from('push_subs').delete().eq('endpoint',sub.endpoint);await sub.unsubscribe()}}catch(e){}
   TM.ep=undefined;S.push={on:false};render();
+}
+// Runs each time the app opens. If reminders were on but the phone or the server lost the subscription (iOS can drop it), set it up again quietly.
+// It does nothing unless reminders were turned on here before, notifications are still allowed, and the check itself worked.
+async function pushHeal(){
+  if(!ME.user||!pushReady()||Notification.permission!=='granted')return;
+  const want=LS.get(lsKey('pushwant'));
+  try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+    if(sub){const {data,error}=await SB.from('push_subs').select('morning,evening,notify_weigh,notify_train,notify_rest').eq('endpoint',sub.endpoint).maybeSingle();
+      if(error)return;
+      if(data){LS.set(lsKey('pushwant'),pushPick(data));return}}
+    if(!want)return;
+    const row=await pushRegister(Object.assign({},PUSH_DEF,want));
+    TM.ep=undefined;S.push=Object.assign({on:true,endpoint:row.endpoint},pushPick(row));if(S.tab==='account')softRender()}
+  catch(e){}
 }
 // Sends a test notification to this phone through the rest-alert function and says what happened.
 async function pushTest(){
@@ -127,8 +151,8 @@ async function pushTest(){
   catch(e){S.pushMsg='Couldn’t send it. Try again.'}
   S.pushBusy=false;render();
 }
-async function pushToggle(field,on){if(!S.push||!S.push.on)return;S.push[field]=on;try{await SB.from('push_subs').update({[field]:on}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
-async function pushHour(field,h){if(!S.push||!S.push.on)return;S.push[field]=h;try{await SB.from('push_subs').update({[field]:h}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
+async function pushToggle(field,on){if(!S.push||!S.push.on)return;S.push[field]=on;pushKeep();try{await SB.from('push_subs').update({[field]:on}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
+async function pushHour(field,h){if(!S.push||!S.push.on)return;S.push[field]=h;pushKeep();try{await SB.from('push_subs').update({[field]:h}).eq('endpoint',S.push.endpoint)}catch(e){}render()}
 function remindersCard(){
   if(!ME.user||!pushReady())return '';
   if(S.push===undefined){loadPush();return ''}
@@ -200,6 +224,7 @@ async function start(){
   if(openCopy())setStatus(navigator.onLine===false?'Offline':'Syncing…');
   render();
   SB.from('profiles').select('display_name,is_admin').eq('id',ME.user.id).maybeSingle().then(({data})=>{if(data){ME.profile=data;keepCopy();meBadge()}},()=>{});
+  pushHeal();
   const timer=setTimeout(()=>{if(!S.loaded){S.timedOut=true;S.note='Still connecting, so some saved data may be missing. Check your connection; it will fill in once it connects.';setStatus('Connecting…');render()}},10000);
   const got=k=>{S.ready[k]=true;keepCopy();if(!S.synced&&S.ready.days&&S.ready.workouts&&S.ready.settings){S.synced=S.loaded=true;clearTimeout(timer);if(S.note&&S.note.startsWith('Still'))S.note=null;if(!Object.keys(pending).length)setStatus('Saved ✓');keepCopy();render();checkPlan();queueBoard();ensureFocus();probeEstimates();return true}return false};
   db.collection('days').onSnapshot(s=>{const ch=applySnap(s,'days',S.days);if(!got('days')&&ch)softRender()},onErr);

@@ -152,6 +152,24 @@ async def main():
               "Each notification has its own switch")
         await page.evaluate("S.push = {on: false}; S.pushNote = ''; render()")
         await page.wait_for_timeout(200)
+        # Reminders that were on and got dropped by the phone are set up again when the app opens, only if they were on here before.
+        fake = """() => {
+          Object.defineProperty(Notification, 'permission', {get: () => 'granted', configurable: true});
+          window.__subbed = 0;
+          const sub = {toJSON: () => ({endpoint: 'https://push.example.com/fresh', keys: {p256dh: 'a', auth: 'b'}})};
+          Object.defineProperty(navigator, 'serviceWorker', {configurable: true, value: {ready: Promise.resolve({pushManager: {
+            getSubscription: async () => null, subscribe: async () => { window.__subbed++; return sub; }}})}});
+          window.__calls.length = 0; }"""
+        await page.evaluate(fake)
+        await page.evaluate("LS.del(lsKey('pushwant')); pushHeal()"); await page.wait_for_timeout(300)
+        check(await page.evaluate("window.__subbed") == 0, "Reminders that were never turned on here are not set up behind your back")
+        await page.evaluate("LS.set(lsKey('pushwant'), {morning: 7, evening: 19, notify_weigh: true, notify_train: false, notify_rest: true}); pushHeal()")
+        await page.wait_for_timeout(400)
+        check(await page.evaluate("window.__subbed") == 1 and await page.evaluate("window.__calls.some(c => c[0] === 'push_subs')")
+              and await page.evaluate("S.push.on && S.push.morning === 7 && S.push.notify_train === false"),
+              "Dropped reminders are set up again with the same settings")
+        await page.evaluate("pushOff()"); await page.wait_for_timeout(300)
+        check(await page.evaluate("LS.get(lsKey('pushwant'))") is None, "Turning reminders off forgets them, so they stay off")
         app = await page.inner_text("#app")
         check("intake requests" in app.lower() and "pablo" in app and "· New" in app, "Admin sees the intake request")
         prompt = await page.evaluate("reqPrompt(window.__reqs[0], 'pablo')")
