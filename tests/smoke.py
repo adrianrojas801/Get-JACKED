@@ -441,8 +441,10 @@ async def main():
 
         await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(300)
         app = (await page.inner_text("#app")).lower()
-        check(await page.locator(".seg[role=tablist] button").count() == 3 and "bodyweight" in app and "records" not in app and "the board" not in app,
-              "Progress is split into Body, Lifts and Friends, and opens on Body")
+        check(await page.locator(".seg[role=tablist] button").count() == 3 and "records" in app and "bodyweight" not in app and "the board" not in app,
+              "Progress is split into Body, Lifts and Friends, and opens on Lifts once you have logged lifts")
+        await page.click("button[data-act=psec][data-v=body]"); await page.wait_for_timeout(300)
+        app = (await page.inner_text("#app")).lower()
         check("you reached 170 lbs" in app and "start a mini-cut" in app, "Reaching the goal weight offers the next phase")
         await page.evaluate("document.body.style.minHeight = '3000px'; window.scrollTo(0, 800)"); await page.wait_for_timeout(200)
         await page.click("nav button[data-tab=progress]"); await page.wait_for_timeout(1200)

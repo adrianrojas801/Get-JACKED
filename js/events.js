@@ -212,7 +212,7 @@ document.addEventListener('touchend',e=>{
   if(!PS||!e.changedTouches.length)return;const s=PS;PS=null;
   const dx=e.changedTouches[0].clientX-s.x,dy=e.changedTouches[0].clientY-s.y;
   if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5||Date.now()-s.t>800)return;
-  const i=PSEC.indexOf(PSEC.includes(S.psec)?S.psec:'body')+(dx<0?1:-1);
+  const i=PSEC.indexOf(PSEC.includes(S.psec)?S.psec:'lifts')+(dx<0?1:-1);
   if(i<0||i>=PSEC.length)return;
   S.psec=PSEC[i];S.showCheckin=false;render();glideTop();
 },{passive:true});

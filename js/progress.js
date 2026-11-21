@@ -124,7 +124,7 @@ function viewProgress(){
     h+=chart([{pts:sess.map((x,i)=>[i,x.v]),color:'var(--accent)'}],{xl:sess.length>1?[short(sess[0].date),short(sess[sess.length-1].date)]:null});
     h+=`<div class="muted">${bw?'The line is your most reps in a set each session.':'The line is your estimated 1-rep max from your best set each session.'}</div><table class="simple" style="margin-top:6px"><tr><th>Date</th><th>Best set</th><th>${bw?'Reps':'Est. 1RM'}</th></tr>${sess.slice(-8).reverse().map(x=>`<tr><td>${short(x.date)}</td><td>${x.top}</td><td>${Math.round(x.v)}</td></tr>`).join('')}</table>`}
   h+=`</div>`;
-  const sections={body:()=>body,lifts:()=>names.length?h+recordsCard(names):`<div class="card"><p class="muted" style="margin:0">Log a workout and your lifts, records and sets per muscle show up here.</p></div>`,friends:()=>h2hCard()+boardCard()},sec=sections[S.psec]?S.psec:'body';
+  const sections={body:()=>body,lifts:()=>names.length?h+recordsCard(names):`<div class="card"><p class="muted" style="margin:0">Log a workout and your lifts, records and sets per muscle show up here.</p></div>`,friends:()=>h2hCard()+boardCard()},sec=sections[S.psec]?S.psec:(names.length?'lifts':'body');
   return `<div class="seg" role="tablist">${[['body','Body'],['lifts','Lifts'],['friends','Friends']].map(([v,l])=>`<button role="tab" aria-selected="${v===sec}" class="${v===sec?'on':''}" data-act="psec" data-v="${v}">${l}</button>`).join('')}</div>`+sections[sec]();
 }
 // Which lifts set a new best in the last 7 days, and which have stalled.
