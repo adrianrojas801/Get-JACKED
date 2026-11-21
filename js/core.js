@@ -28,7 +28,6 @@ function titled(id,title,text){const on=!!(S.info&&S.info[id]);return `<div clas
 
 // ---------- state ----------
 const S={db:null,days:{},workouts:{},settings:{},tab:'today',dk:today(),wd:today(),wp:null,note:null,lift:null,swap:null,addEx:false,copied:false,needRender:false,known:{},ready:{},boot:true,loaded:false};
-try{const t=localStorage.getItem('gt_tab');if(t)S.tab=t}catch(e){}
 const cfg=()=>S.settings||{};
 const T=()=>({cal:num(cfg().cal)||2600,pro:num(cfg().pro)||160,goal:num(cfg().goal)||173,block:cfg().block||null});
 const presets=()=>Array.isArray(cfg().presets)?cfg().presets:(isLegacy()?DEFAULT_PRESETS:STARTER_PRESETS);
