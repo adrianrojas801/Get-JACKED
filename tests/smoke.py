@@ -422,6 +422,12 @@ async def main():
         check((await page.evaluate(f"window.__docs['days/{ago(0)}']")).get("cardio") == 20 and "done · 20 min" in (await page.inner_text("#app")).lower(), "The cardio card logs 20 minutes in one tap")
         await page.click("button[data-act=cardio]"); await page.wait_for_timeout(300)
         check(not (await page.evaluate(f"window.__docs['days/{ago(0)}']")).get("cardio"), "Remove clears the cardio, with undo")
+        # Away for a while: coming back lands on the top of Today. A short break leaves you where you were.
+        vis = "(v) => { Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => v}); document.dispatchEvent(new Event('visibilitychange')); }"
+        await page.evaluate(vis, "hidden"); await page.evaluate("hiddenAt = Date.now() - 2 * 60000"); await page.evaluate(vis, "visible"); await page.wait_for_timeout(300)
+        check(await page.evaluate("S.tab") == "workout", "A short break keeps you on the same tab")
+        await page.evaluate(vis, "hidden"); await page.evaluate("hiddenAt = Date.now() - 11 * 60000"); await page.evaluate("scrollTo(0, 200)"); await page.evaluate(vis, "visible"); await page.wait_for_timeout(300)
+        check(await page.evaluate("S.tab") == "today" and await page.evaluate("scrollY") == 0, "After 10+ minutes away you land on the top of Today")
         await page.click("nav button[data-tab=today]"); await page.wait_for_timeout(300)
         await page.click("nav button[data-tab=workout]"); await page.wait_for_timeout(1000)
         top = await page.evaluate("document.querySelector('.exopen').getBoundingClientRect().top")

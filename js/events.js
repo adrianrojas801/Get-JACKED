@@ -3,7 +3,7 @@
 // Loaded by index.html in a fixed order (see the <script> tags there). All files share one global scope.
 
 // ---------- events ----------
-$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const same=S.tab===b.dataset.tab;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;try{localStorage.setItem('gt_tab',S.tab)}catch(x){}const y0=scrollY;render();
+$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const same=S.tab===b.dataset.tab;S.tab=b.dataset.tab;S.swap=null;S.flash=null;S.redo=false;const y0=scrollY;render();
   // Workout with an open exercise: stay where you were and glide to it, with no fade-in, so it doesn't feel like a new page.
   const c=S.tab==='workout'&&S.wp!=='rest'&&wLive(curWorkout())&&$('.exopen'),m=$('#app');m.classList.remove('enter');
   if(c){window.scrollTo(0,Math.min(y0,Math.max(0,document.documentElement.scrollHeight-innerHeight)));c.scrollIntoView({block:'start',behavior:'smooth'})}
@@ -226,3 +226,13 @@ app.addEventListener('pointermove',e=>{if(!DR||e.pointerId!==DR.id)return;e.prev
 function endDrag(e){if(!DR||e.pointerId!==DR.id)return;const order=[...DR.list.children].map(x=>+x.dataset.ri);DR.li.classList.remove('dragging');DR=null;
   const w=curWorkout();if(order.length===w.ex.length&&!order.every((v,k)=>v===k)){w.ex=order.map(k=>w.ex[k]);putWorkout(w)}render()}
 app.addEventListener('pointerup',endDrag);app.addEventListener('pointercancel',endDrag);
+
+// Coming back after a while: start again at the top of Today. A fresh launch always opens on Today (S.tab starts as 'today').
+// Skipped while a rest timer is running, so a workout isn't pulled out from under you.
+const AWAY_MS=10*60*1000;let hiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){hiddenAt=Date.now();return}
+  const away=hiddenAt?Date.now()-hiddenAt:0;hiddenAt=0;
+  if(away<AWAY_MS||!S.loaded||TM.iv)return;
+  S.tab='today';S.sheet=null;S.swap=null;S.flash=null;S.dk=today();render();scrollTo(0,0);
+});
