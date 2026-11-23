@@ -246,6 +246,8 @@ button.exrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left
 .setnow{background:var(--field);border:1px solid var(--line);border-radius:14px;padding:12px}
 .setlabel{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px}
 .stps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.plates{font-size:13px;color:var(--muted);text-align:center;margin-top:6px}
+.plates:empty{display:none}
 .stp{display:grid;grid-template-columns:38px 1fr 38px;align-items:center;gap:3px}
 .stp>button{height:48px;padding:0;font-size:22px;font-weight:600;border-radius:12px;background:var(--card)}
 .stp label{display:flex;flex-direction:column;align-items:center;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}

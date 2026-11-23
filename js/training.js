@@ -22,6 +22,17 @@ function targetFor(last,ex,stall){
   let bumped=false;
   return base.map(s=>{let r=num(s.r);if(!bumped&&r<hi){r++;bumped=true}return {w:num(s.w)||0,r}});
 }
+// ---------- plates ----------
+// Smith lifts are logged as the total: plates on both sides + the 25 lb bar. Hack squat is logged as plates only.
+// The set you're on shows what goes on each side, so nobody has to do the math at the machine.
+const SMITH_BAR=25,PLATES=[45,25,10,5,2.5];
+const plateBar=ex=>/hack squat/i.test(ex.n)?0:(/smith/i.test(ex.n)||/^smith\b/i.test(ex.note||''))?SMITH_BAR:null;
+function platesFor(total,bar){let side=(num(total)-bar)/2;if(!(side>0))return null;const out=[];for(const p of PLATES)while(side>=p-1e-9){out.push(p);side-=p}return side>1e-9?null:out}
+function platesText(ex,w){
+  const bar=plateBar(ex),t=num(w);if(bar==null||!t)return '';
+  if(bar&&t===bar)return `Just the ${bar} lb bar`;
+  const p=platesFor(t,bar);return p?(bar?`${bar} lb bar + `:'')+p.join(' + ')+' each side':'';
+}
 const targetText=t=>{const same=t.every(x=>x.w===t[0].w);return same?`${t[0].w||'BW'} × ${t.map(x=>x.r).join(', ')}`:t.map(x=>`${x.w||'BW'}×${x.r}`).join(' · ')};
 function hint(last,ex,stall){
   if(!last)return 'First time: pick a weight you can do for '+ex.r.split('-')[0]+' reps with 1–2 left in the tank.';

@@ -139,6 +139,11 @@ const setsLeft=e=>e.sets.some(s=>!s.d);
 const wLive=w=>!!w&&!!(w.t0||w.done);
 const targetOf=(w,id,e)=>{const last=lastFor(e.n,w.date,id),stall=stallOf(liftHistory(e.n,w.date,id));return {last,stall,tg:targetFor(last,withJump(e,w.prog),stall)}};
 // What a blank set gets logged as: today's target, or the weight you used on the set before if you changed it.
+// The note the program gives this exercise (a swapped-in lift keeps its own). Plates need it: "Calf raise" says Smith only in its note.
+function exNote(w,e){const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];return (te&&te.n===e.n)?(te.note||''):(e.note||'')}
+// What goes on each side for the set you're on: its weight, or what an empty field means (setDefault).
+function platesLine(w,i,j){const e=w.ex[i],s=e.sets[j];if(!s)return '';const v=s.w===''?setDefault(w,i,j).w:s.w;return platesText({n:e.n,note:exNote(w,e)},v)}
+function refreshPlates(w,i,j){const el=app.querySelector(`#pl${i}`);if(el&&+el.dataset.j===j)el.textContent=platesLine(w,i,j)}
 function setDefault(w,i,j){
   const ex=w.ex[i],t=(targetOf(w,wid(w.date,w.prog),ex).tg||[])[j],prev=j>0?ex.sets[j-1]:null,pw=prev&&prev.d&&num(prev.w)!=null?num(prev.w):null;
   return {w:pw!=null?pw:(t&&t.w?t.w:''),r:t?t.r:(prev&&prev.d?num(prev.r):'')};
@@ -160,12 +165,12 @@ function exCard(w,id,i,open){
   const now=e.sets.findIndex(s=>!s.d),inp=(j,f,s,cls='')=>{const t=tg&&tg[j];return `<input class="${cls}" type="number" inputmode="${f==='w'?'decimal':'numeric'}" ${f==='w'?'step="2.5"':''} data-w="${i}" data-s="${j}" data-f="${f}" value="${s[f]}" placeholder="${f==='w'?(t?(t.w||'BW'):'lbs'):(t?t.r:'reps')}" aria-label="Set ${j+1} ${f==='w'?'weight':'reps'}">`};
   const stepper=(j,f,s,unit,by)=>`<div class="stp"><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="-${by}" aria-label="${by} less">−</button><label>${inp(j,f,s)}<span>${unit}</span></label><button data-act="step" data-i="${i}" data-j="${j}" data-f="${f}" data-v="${by}" aria-label="${by} more">+</button></div>`;
   let h=`<div class="card exopen ${done===e.sets.length?'exdone':''}"><div class="row between"><div class="grow"><b>${tag}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(restOf(w,e)/60)}:${pad(restOf(w,e)%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
-  {const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];const nt=(te&&te.n===e.n)?(te.note||''):e.note;if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`}
+  {const nt=exNote(w,e);if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`}
   if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
   h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b></div>`:''}<div class="setlist">`;
   e.sets.forEach((s,j)=>{
     // The set you're on gets big − / + controls and a wide Done button. The others stay as compact rows you can still edit.
-    if(j===now)h+=`<div class="setnow"><div class="setlabel">Set ${j+1} of ${e.sets.length}</div><div class="stps">${stepper(j,'w',s,'lbs',5)}${stepper(j,'r',s,'reps',1)}</div><button class="primary big" data-act="setdone" data-i="${i}" data-j="${j}">Done</button></div>`;
+    if(j===now)h+=`<div class="setnow"><div class="setlabel">Set ${j+1} of ${e.sets.length}</div><div class="stps">${stepper(j,'w',s,'lbs',5)}${stepper(j,'r',s,'reps',1)}</div><div class="plates" id="pl${i}" data-j="${j}">${platesLine(w,i,j)}</div><button class="primary big" data-act="setdone" data-i="${i}" data-j="${j}">Done</button></div>`;
     else h+=`<div class="setrow ${s.d?'isdone':''}"><span>${j+1}</span>${inp(j,'w',s)}${inp(j,'r',s)}<button data-act="setdone" data-i="${i}" data-j="${j}">${s.d?'✓':'Done'}</button></div>`});
   return h+`</div><div class="row" style="margin-top:8px"><button class="small" data-act="setadd" data-i="${i}">+ Set</button><button class="small" data-act="setdel" data-i="${i}">− Set</button><button class="small" data-act="rest" data-v="${restOf(w,e)}">Rest timer</button></div></div>`;
 }
