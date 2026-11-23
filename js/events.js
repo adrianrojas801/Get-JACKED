@@ -28,7 +28,7 @@ app.addEventListener('input',e=>{
     putSettings(s,700);return}
   if(ds.sn!=null&&S.snap&&S.snap.items){const x=S.snap.items[+ds.sn];if(x){x[ds.sf]=ds.sf==='n'?el.value:(num(el.value)||0)}return}
   if(ds.day){const d=dayDoc(S.dk);d[ds.day]=el.type==='checkbox'?el.checked:(ds.day==='note'?el.value:num(el.value));putDay(S.dk,d,el.type==='checkbox'?0:700);if(el.type==='checkbox')render();else if(ds.day==='steps')S.needRender=true}
-  else if(ds.w!=null&&ds.f){const w=curWorkout();const s=w.ex[+ds.w].sets[+ds.s];s[ds.f]=el.value===''?'':+el.value;putWorkout(w,700)}
+  else if(ds.w!=null&&ds.f){const w=curWorkout();const s=w.ex[+ds.w].sets[+ds.s];s[ds.f]=el.value===''?'':+el.value;putWorkout(w,700);if(ds.f==='w')refreshPlates(w,+ds.w,+ds.s)}
   else if(ds.wnote){const w=curWorkout();w.note=el.value;putWorkout(w,700)}
   else if(ds.pre!=null){const s=clone(cfg());const ps=clone(presets());const p=ps[+ds.pre];p[ds.pf]=ds.pf==='n'||ds.pf==='g'?el.value:(num(el.value)||0);s.presets=ps;putSettings(s,700)}
 });
@@ -119,7 +119,7 @@ app.addEventListener('click',e=>{
   // − / + on the set you're on. An empty field starts from today's target, so one tap means "one more (or less) than planned".
   else if(act==='step'){const w=curWorkout(),j=+ds.j,s=w.ex[i].sets[j],f=ds.f;if(!s)return;
     const cur=s[f]===''?(num(setDefault(w,i,j)[f])||0):+s[f];s[f]=Math.max(f==='r'?1:0,cur+(+ds.v));putWorkout(w,700);
-    const el=app.querySelector(`input[data-w="${i}"][data-s="${j}"][data-f="${f}"]`);if(el)el.value=s[f]}
+    const el=app.querySelector(`input[data-w="${i}"][data-s="${j}"][data-f="${f}"]`);if(el)el.value=s[f];if(f==='w')refreshPlates(w,i,j)}
   else if(act==='setadd'){const w=curWorkout();const st=w.ex[i].sets;const l=st[st.length-1];st.push({w:l?l.w:'',r:'',d:false});putWorkout(w);render()}
   else if(act==='setdel'){const w=curWorkout();const st=w.ex[i].sets;if(st.length>1&&!st[st.length-1].d){st.pop();putWorkout(w);render()}}
   else if(act==='rest')startTimer(+ds.v);
