@@ -25,7 +25,7 @@ function targetFor(last,ex,stall){
 // ---------- plates ----------
 // Smith lifts are logged as the total: plates on both sides + the 25 lb bar. Hack squat is logged as plates only.
 // The set you're on shows what goes on each side, so nobody has to do the math at the machine.
-const SMITH_BAR=25,PLATES=[45,35,25,10,5,2.5];
+const SMITH_BAR=25,PLATES=[45,25,10,5,2.5];
 const plateBar=ex=>/hack squat/i.test(ex.n)?0:(/smith/i.test(ex.n)||/^smith\b/i.test(ex.note||''))?SMITH_BAR:null;
 function platesFor(total,bar){let side=(num(total)-bar)/2;if(!(side>0))return null;const out=[];for(const p of PLATES)while(side>=p-1e-9){out.push(p);side-=p}return side>1e-9?null:out}
 function platesText(ex,w){

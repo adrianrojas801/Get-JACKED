@@ -411,8 +411,8 @@ async def main():
         check(done["w"] == 40 and done["r"] == 11 and done["d"], "Tapping Done on an empty set logs the target")
         check("set 2 of 3" in (await page.inner_text(".exopen")).lower(), "Done moves on to the next set")
         # Plates: Smith lifts show what goes on each side (total minus the 25 lb bar), hack squat counts plates only.
-        check(await page.evaluate("JSON.stringify([platesText({n:'Smith squat'},175), platesText({n:'Incline Smith press'},145), platesText({n:'Hack squat'},140), platesText({n:'Calf raise',note:'Smith, toes on a plate.'},165), platesText({n:'Smith bench press'},25), platesText({n:'Smith row'},26), platesText({n:'Lat pulldown'},160)])")
-              == '["25 lb bar + 45 + 25 + 5 each side","25 lb bar + 45 + 10 + 5 each side","45 + 25 each side","25 lb bar + 45 + 25 each side","Just the 25 lb bar","",""]', "Plate breakdown for Smith, hack squat and calf raise; nothing for other lifts")
+        check(await page.evaluate("JSON.stringify([platesText({n:'Smith squat'},175), platesText({n:'Incline Smith press'},145), platesText({n:'Hack squat'},140), platesText({n:'Calf raise',note:'Smith, toes on a plate.'},165), platesText({n:'Smith bench press'},25), platesText({n:'Smith row'},26), platesText({n:'Lat pulldown'},160), platesText({n:'Smith shoulder press'},95)])")
+              == '["25 lb bar + 45 + 25 + 5 each side","25 lb bar + 45 + 10 + 5 each side","45 + 25 each side","25 lb bar + 45 + 25 each side","Just the 25 lb bar","","","25 lb bar + 25 + 10 each side"]', "Plate breakdown for Smith, hack squat and calf raise; nothing for other lifts")
         check(await page.inner_text("#pl1") == "", "A cable lift shows no plates")
         await page.evaluate("(()=>{const w=curWorkout();w.ex[1].n='Smith bent-over row';putWorkout(w);render()})()"); await page.wait_for_timeout(200)
         before = await page.inner_text("#pl1")
