@@ -55,6 +55,12 @@ app.addEventListener('click',e=>{
     toast(off?`Superset ${g} back on`:`Superset ${g} off for today`,()=>putWorkout(before));return}}
   const b=e.target.closest('button');if(!b||!b.dataset.act)return;const ds=b.dataset,act=ds.act,i=+ds.i;
   if(act==='day'){S.dk=addDays(S.dk,+ds.v);if(S.dk>today())S.dk=today();render()}
+  else if(act==='offask'){S.offAsk=!S.offAsk;render()}
+  else if(act==='offday'){const before=clone(curWorkout()),w=curWorkout(),v=ds.v;S.offAsk=false;
+    // Fewer sets: drop the last set of every exercise that still has one left (never a done set, never the only set).
+    if(v==='sets')for(const e of w.ex){const d=e.sets.filter(s=>s.d).length;if(e.sets.length>1&&e.sets.length>d&&!e.sets[e.sets.length-1].d)e.sets.pop()}
+    w.off=v==='normal'?'no':v;putWorkout(w);render();
+    toast({light:'Off day: lighter on the heavy lifts',sets:'Off day: one less set on each exercise',no:'Keeping today’s targets',normal:'Back to normal targets'}[v],()=>putWorkout(before))}
   else if(act==='gotoday'){S.dk=today();render()}
   else if(act==='startw'){S.wd=S.dk;S.wp=wpFor(S.dk);S.exOpen=null;S.tab='workout';render();glideTop()}
   else if(act==='qedit'){S.qedit=!S.qedit;render()}
