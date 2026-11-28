@@ -126,9 +126,14 @@ function getWorkout(date,prog){
 }
 function putWorkout(w,delay=0){w.updated=Date.now();const id=wid(w.date,w.prog);S.workouts[id]=w;save('workouts/'+id,w,delay)}
 function curWorkout(){return getWorkout(S.wd,S.wp)}
+// A session marked as an off day (lighter weights or fewer sets) on purpose. It is skipped when picking "last time"
+// and when looking for a stall, so a bad day doesn't pull the next targets down.
+const isOff=w=>!!w&&(w.off==='light'||w.off==='sets');
 function lastFor(name,date,excludeId){
   const list=Object.entries(S.workouts).filter(([id,w])=>id!==excludeId&&w&&w.date<=date)
     .sort((a,b)=>b[1].date.localeCompare(a[1].date)||(b[1].updated||0)-(a[1].updated||0));
-  for(const [,w] of list){const e=(w.ex||[]).find(x=>x.n===name);if(e){const sets=(e.sets||[]).filter(s=>s.d&&num(s.r));if(sets.length)return {date:w.date,sets};}}
+  // Normal sessions first; off days only when the lift has no normal session yet.
+  for(const normal of [true,false])for(const [,w] of list){if(normal&&isOff(w))continue;
+    const e=(w.ex||[]).find(x=>x.n===name);if(e){const sets=(e.sets||[]).filter(s=>s.d&&num(s.r));if(sets.length)return {date:w.date,sets};}}
   return null;
 }

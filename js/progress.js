@@ -168,6 +168,7 @@ const SOURCES=[
   ['Gaining weight faster mostly adds fat, not muscle.','Helms 2023','https://pubmed.ncbi.nlm.nih.gov/37914977/'],
   ['On a cut, losing about 0.7% of body weight a week kept more muscle than twice that pace.','Garthe 2011','https://pubmed.ncbi.nlm.nih.gov/21558571/'],
   ['Light and heavy weights grow similar muscle when sets are hard; heavy is better for max strength.','Schoenfeld 2017','https://pubmed.ncbi.nlm.nih.gov/28834797/'],
+  ['Adjusting the weight to how you feel that day works about as well as fixed targets.','Hickmott 2022','https://pubmed.ncbi.nlm.nih.gov/35038063/'],
   ['Protein helps up to about 1.6 g per kg (0.7 g per lb) a day; the targets here sit above that.','Morton 2018','https://pubmed.ncbi.nlm.nih.gov/28698222/']];
 
 // ---------- program suggestions (the plan adapts; you approve each change) ----------

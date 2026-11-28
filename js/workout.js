@@ -104,7 +104,7 @@ function viewWorkout(){
   if(S.wp==='rest')return h+`<div class="card"><h2>Rest day</h2><p>Recovery is when you grow. Get a walk in or hit 8–10k steps, eat your protein, and sleep 7.5+ hours.</p><p class="muted">Want to train anyway? Pick a session above.</p></div>`;
   const w=curWorkout(),id=wid(w.date,w.prog);
   const doneSets=w.ex.reduce((a,e)=>a+e.sets.filter(s=>s.d).length,0),allSets=w.ex.reduce((a,e)=>a+e.sets.length,0);
-  h+=`<div class="row between" style="margin:8px 4px"><div><b>${esc(w.title)}</b><div class="muted">${doneSets}/${allSets} sets${w.done?' · finished ✓':''}</div></div>${S.reorder?'':`<div class="row">${wLive(w)?`<button class="small" data-act="wreset">${doneSets||w.done?'Reset':'Undo start'}</button>`:''}<button class="small" data-act="reorder"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M8 4 4.5 7.5M8 4l3.5 3.5M16 20V4M16 20l-3.5-3.5M16 20l3.5-3.5"/></svg>Reorder</button></div>`}</div>`;
+  h+=`<div class="row between" style="margin:8px 4px"><div><b>${esc(w.title)}</b><div class="muted">${doneSets}/${allSets} sets${w.done?' · finished ✓':''}</div></div>${S.reorder?'':`<div class="row">${wLive(w)&&!w.done&&!w.off?`<button class="small ${num((S.days[w.date]||{}).sleep)&&num(S.days[w.date].sleep)<6?'primary':''}" data-act="offask">Off day</button>`:''}${wLive(w)?`<button class="small" data-act="wreset">${doneSets||w.done?'Reset':'Undo start'}</button>`:''}<button class="small" data-act="reorder"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M8 4 4.5 7.5M8 4l3.5 3.5M16 20V4M16 20l-3.5-3.5M16 20l3.5-3.5"/></svg>Reorder</button></div>`}</div>`;
   if(S.reorder){
     h+=`<div class="card"><div class="row between"><h2 style="margin:0">Drag ⠿ to match your order</h2><button class="small primary" data-act="reorder">Done</button></div>
       <ul class="list" id="rlist" style="margin-top:6px">${w.ex.map((e,i)=>{const d=e.sets.filter(x=>x.d).length;return `<li class="ritem" data-ri="${i}"><span class="handle" aria-label="drag">⠿</span><div class="grow">${esc(e.n)}<div class="muted">${d}/${e.sets.length} sets</div></div><button class="small" data-act="mv" data-i="${i}" data-v="-1" ${i===0?'disabled':''}>↑</button><button class="small" data-act="mv" data-i="${i}" data-v="1" ${i===w.ex.length-1?'disabled':''}>↓</button></li>`}).join('')}</ul>
@@ -119,6 +119,10 @@ function viewWorkout(){
   const live=wLive(w),pick=S.exOpen!=null&&w.ex[S.exOpen]?S.exOpen:-1;
   if(!live)h+=`<button class="primary big" data-act="wstart">Start workout</button>`;
   const open=live&&pick<0?w.ex.findIndex(setsLeft):pick;
+  if(live&&!w.done){
+    if(isOff(w))h+=`<div class="muted" style="margin:0 4px 8px">Off day: ${w.off==='light'?'about 10% lighter on the heavy lifts':'one less set on each exercise'}. Next time aims from your last normal session.${w.off==='light'?' <button class="small link" data-act="offday" data-v="normal">Back to normal</button>':''}</div>`;
+    else{const k=offTrigger(w,id);if(k!=null||S.offAsk)h+=offCard(w,k)}
+  }
   w.ex.forEach((e,i)=>{h+=exCard(w,id,i,i===open)});
   if(S.addEx)h+=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Add exercise</h2><button class="small" data-act="axclose">Cancel</button></div><div class="grid3"><input id="axn" placeholder="Name" style="grid-column:1/4"><input id="axs" type="number" inputmode="numeric" value="3" placeholder="sets"><input id="axr" value="8-12" placeholder="reps (8-12)"><button class="primary" data-act="axadd">Add</button></div></div>`;
   else h+=`<button data-act="axopen" style="width:100%;margin:4px 0">+ Add exercise</button>`;
@@ -137,7 +141,35 @@ function cardioCard(date){
 const setsLeft=e=>e.sets.some(s=>!s.d);
 // A workout is under way once Start workout is tapped (or a set is logged), and stays that way when finished.
 const wLive=w=>!!w&&!!(w.t0||w.done);
-const targetOf=(w,id,e)=>{const last=lastFor(e.n,w.date,id),stall=stallOf(liftHistory(e.n,w.date,id));return {last,stall,tg:targetFor(last,withJump(e,w.prog),stall)}};
+const targetOf=(w,id,e)=>{const last=lastFor(e.n,w.date,id),stall=stallOf(liftHistory(e.n,w.date,id).filter(x=>!isOff(S.workouts[x.id]))),ex=withJump(e,w.prog);
+  let tg=targetFor(last,ex,stall);if(tg&&offLight(w,e))tg=tg.map(t=>t.w>0?{w:offLower(t.w,ex),r:t.r}:t);return {last,stall,tg}};
+// ---------- off days ----------
+// When the first 2 sets of the day's first lift both come in under target (2+ reps short at the target weight, or a
+// lighter weight), the workout asks whether today is an off day. w.off: 'light' = about 10% off the heavy lifts (rest of
+// 2:00 or more in the program) with the same reps; isolation lifts keep their weight. 'sets' = one less set on every
+// exercise left. 'no' = keep going. Only today changes, and lastFor/targetOf skip off days afterwards.
+const heavyEx=e=>num(e.rest)>=120;
+const offLight=(w,e)=>w.off==='light'&&heavyEx(e);
+// About 10% lighter, in whole jumps (a plate a side on the Smith, a pin on a stack), so the weight exists.
+function offLower(wt,ex){const j=jumpFor(ex),n=Math.max(1,Math.round(wt*0.1/j));return Math.max(0,wt-n*j)}
+function offTrigger(w,id){
+  if(w.off||w.done)return null;
+  const i=w.ex.findIndex(e=>e.sets.some(s=>s.d));if(i<0)return null;
+  const e=w.ex[i],idx=e.sets.map((s,j)=>s.d?j:-1).filter(j=>j>=0);if(idx.length<2)return null;
+  const tg=targetOf(w,id,e).tg;if(!tg)return null;
+  const miss=j=>{const t=tg[j],s=e.sets[j];if(!t)return false;const W=num(s.w)||0,R=num(s.r)||0;return (t.w>0&&W<t.w)||(W===t.w&&R<=t.r-2)};
+  return miss(idx[0])&&miss(idx[1])?i:null;
+}
+function offCard(w,k){
+  const e=k!=null?w.ex[k]:null;
+  return coachOpen('Off day?')+`<p>${e?`Your first 2 sets of ${esc(e.n)} came in under target. `:''}Take it easier for the rest of today?</p>
+    <div class="row wrap"><button class="small primary" data-act="offday" data-v="light">Lighter weight</button><button class="small" data-act="offday" data-v="sets">Fewer sets</button><button class="small" data-act="offday" data-v="no">Keep going</button></div>
+    <div class="muted" style="margin-top:6px">Lighter: about 10% off the heavy lifts, same reps. Fewer sets: one less set on each exercise left. Either way, next time aims from your last normal session.</div></div>`;
+}
+function offHint(e,tg){
+  if(!heavyEx(e))return 'Off day: same weight. A rep or two fewer is fine.';
+  return `<span class="warn">Off day: about 10% lighter today${tg&&tg[0]&&tg[0].w?` (${tg[0].w} lbs)`:''}, same reps.</span>`;
+}
 // What a blank set gets logged as: today's target, or the weight you used on the set before if you changed it.
 // The note the program gives this exercise (a swapped-in lift keeps its own). Plates need it: "Calf raise" says Smith only in its note.
 function exNote(w,e){const te=e.ti!=null&&dayOf(w.prog)&&dayOf(w.prog).ex[e.ti];return (te&&te.n===e.n)?(te.note||''):(e.note||'')}
@@ -146,7 +178,9 @@ function platesLine(w,i,j){const e=w.ex[i],s=e.sets[j];if(!s)return '';const v=s
 function refreshPlates(w,i,j){const el=app.querySelector(`#pl${i}`);if(el&&+el.dataset.j===j)el.textContent=platesLine(w,i,j)}
 function setDefault(w,i,j){
   const ex=w.ex[i],t=(targetOf(w,wid(w.date,w.prog),ex).tg||[])[j],prev=j>0?ex.sets[j-1]:null,pw=prev&&prev.d&&num(prev.w)!=null?num(prev.w):null;
-  return {w:pw!=null?pw:(t&&t.w?t.w:''),r:t?t.r:(prev&&prev.d?num(prev.r):'')};
+  // On a lighter off day the heavier weight from before doesn't carry over; a weight you lowered yourself does.
+  let W=pw!=null?pw:(t&&t.w?t.w:'');if(offLight(w,ex)&&t&&t.w&&pw!=null)W=Math.min(pw,t.w);
+  return {w:W,r:t?t.r:(prev&&prev.d?num(prev.r):'')};
 }
 // Which exercise to open after finishing a set: the superset partner, else stay until it's done, else the next one with sets left.
 // A superset can be switched off for the day (w.ssOff holds the group letters that are off). The exercises then run one after another.
@@ -167,7 +201,7 @@ function exCard(w,id,i,open){
   let h=`<div class="card exopen ${done===e.sets.length?'exdone':''}"><div class="row between"><div class="grow"><b>${tag}${esc(e.n)}</b><div class="muted">${e.sets.length} × ${esc(e.r)} · rest ${Math.floor(restOf(w,e)/60)}:${pad(restOf(w,e)%60)}</div></div>${exFig(e.n)}<button class="small" data-act="swap" data-i="${i}">Swap</button></div>`;
   {const nt=exNote(w,e);if(nt)h+=`<div class="muted" style="margin-top:4px">${esc(nt)}</div>`}
   if(S.swap===i)h+=`<div class="banner"><label class="f">Replace with<input id="swapname" value="${esc(e.n)}"></label><div class="row wrap" style="margin-top:8px"><button class="small" data-act="swapone" data-i="${i}">Today only</button>${e.ti!=null?`<button class="small primary" data-act="swapall" data-i="${i}">Always</button>`:''}<button class="small" data-act="exdel" data-i="${i}">Remove exercise</button><button class="small link" data-act="swapx">Cancel</button></div></div>`;
-  h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b></div>`:''}<div class="setlist">`;
+  h+=`<div class="muted" style="margin-top:6px">${last?`Last (${short(last.date)}): `+last.sets.map(s=>`${num(s.w)??'BW'}×${s.r}`).join(' · '):'No history yet.'}</div><div class="hint">${offLight(w,e)||w.off==='light'?offHint(e,tg):hint(last,withJump(e,w.prog),stall)}</div>${tg?`<div class="target">Today: <b>${targetText(tg)}</b></div>`:''}<div class="setlist">`;
   e.sets.forEach((s,j)=>{
     // The set you're on gets big − / + controls and a wide Done button. The others stay as compact rows you can still edit.
     if(j===now)h+=`<div class="setnow"><div class="setlabel">Set ${j+1} of ${e.sets.length}</div><div class="stps">${stepper(j,'w',s,'lbs',5)}${stepper(j,'r',s,'reps',1)}</div><div class="plates" id="pl${i}" data-j="${j}">${platesLine(w,i,j)}</div><button class="primary big" data-act="setdone" data-i="${i}" data-j="${j}">Done</button></div>`;

@@ -420,6 +420,32 @@ async def main():
         check(before == "25 lb bar + 5 + 2.5 each side" and await page.inner_text("#pl1") == "25 lb bar + 10 each side", "The plates line follows the weight on the set you're on")
         await page.click("button[data-act=step][data-i='1'][data-f=w][data-v='-5']"); await page.wait_for_timeout(100)
         await page.evaluate("(()=>{const w=curWorkout();w.ex[1].n='Cable curl';w.ex[1].sets[1].w='';putWorkout(w);render()})()"); await page.wait_for_timeout(300)
+        # Off days: two sets under target on the first lift asks whether to take it easier; the choice only changes today.
+        await page.evaluate("""(()=>{const w=curWorkout();window.__keepEx=clone(w.ex);window.__keepOpen=S.exOpen;const D=k=>addDays(today(),-k);
+          const sq=sets=>({n:'Smith squat',s:3,r:'6-10',rest:180,sets});
+          S.workouts[D(7)+'_x']={date:D(7),prog:'x',ex:[sq([{w:165,r:8,d:true},{w:165,r:8,d:true},{w:165,r:8,d:true}])]};
+          w.ex=[sq([{w:165,r:6,d:true},{w:165,r:6,d:true},{w:'',r:'',d:false}]),{n:'Cable curl',s:3,r:'10-12',rest:60,sets:[{w:40,r:10,d:true},{w:'',r:'',d:false}]}];
+          S.exOpen=0;putWorkout(w);render()})()"""); await page.wait_for_timeout(300)
+        check("off day?" in (await page.inner_text("#app")).lower(), "Two sets 2+ reps under target asks whether it's an off day")
+        await page.click("button[data-act=offday][data-v=light]"); await page.wait_for_timeout(300)
+        off = await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']")
+        tg = await page.evaluate("JSON.stringify([targetOf(curWorkout(),wid(today(),'a'),curWorkout().ex[0]).tg.map(t=>t.w), setDefault(curWorkout(),0,2).w, targetOf(curWorkout(),wid(today(),'a'),curWorkout().ex[1]).tg])")
+        check(off.get("off") == "light" and tg.startswith("[[145,145,145],145,") and "off day?" not in (await page.inner_text("#app")).lower(),
+              "Lighter weight takes whole jumps off the heavy lift (165 → 145) and the card goes away")
+        check(await page.evaluate("JSON.stringify(targetOf(curWorkout(),wid(today(),'a'),curWorkout().ex[1]).tg.map(t=>t.w))") == "[40,40]", "Isolation lifts keep their weight on a lighter day")
+        await page.click("#undo"); await page.wait_for_timeout(300)
+        check(not (await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']")).get("off"), "Undo takes the off day back")
+        await page.click("button[data-act=offday][data-v=sets]"); await page.wait_for_timeout(300)
+        w = await page.evaluate(f"window.__docs['workouts/{ago(0)}_a']")
+        check(w.get("off") == "sets" and [len(e["sets"]) for e in w["ex"]] == [2, 1],
+              "Fewer sets drops the last open set of each exercise, never a done one")
+        nxt = await page.evaluate("""(()=>{const D=k=>addDays(today(),-k);const keep=S.workouts[D(7)+'_x'];
+          S.workouts[D(3)+'_x']={date:D(3),prog:'x',off:'light',ex:[{n:'Smith squat',s:3,r:'6-10',rest:180,sets:[{w:145,r:8,d:true}]}]};
+          const a=lastFor('Smith squat',today(),wid(today(),'a')).sets[0].w;delete S.workouts[D(7)+'_x'];
+          const b=lastFor('Smith squat',today(),wid(today(),'a')).sets[0].w;S.workouts[D(7)+'_x']=keep;return JSON.stringify([a,b])})()""")
+        check(nxt == "[165,145]", "Next time aims from the last normal session; an off day counts only when there is nothing else")
+        await page.evaluate("""(()=>{const w=curWorkout();w.ex=window.__keepEx;delete w.off;const D=k=>addDays(today(),-k);
+          delete S.workouts[D(7)+'_x'];delete S.workouts[D(3)+'_x'];S.exOpen=window.__keepOpen;putWorkout(w);render()})()"""); await page.wait_for_timeout(300)
         # Rest alert: leaving the app mid-rest asks the server to push when it ends; coming back cancels it.
         await page.evaluate("TM.ep = 'https://push.example.com/abcdefghij'; startTimer(60); window.__calls.length = 0")
         hide = "(h) => { Object.defineProperty(document, 'hidden', {configurable: true, get: () => h}); document.dispatchEvent(new Event('visibilitychange')); }"
